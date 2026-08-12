@@ -15,18 +15,13 @@ The study aims to evaluate how different skin swab methods affect bacterial comm
 ## Repository Structure
 
 ```text
-Swab_comparison/
-├── Swab_comparison.Rproj
-├── R/
-│   ├── preprocessing/
-│   ├── diversity/
-│   ├── differential_abundance/
-│   └── visualization/
+./
+├── Proj_DT_Swab.Rproj
+├── Script/
 ├── metadata/
-├── config/
-├── results/
+├── Figures/
+├── Tables/
 ├── .gitignore
-├── renv.lock
 └── README.md
 ```
 
