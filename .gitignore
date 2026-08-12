@@ -1,0 +1,16 @@
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+data/
+results/
+
+*.fastq
+*.fastq.gz
+*.bam
+*.sam
+
+renv/library/
+renv/staging/
+renv/cache/
