@@ -1,0 +1,911 @@
+---
+title: "01_Preprocessing"
+author: "kim soyeon"
+date: "2026-08-12"
+output: html_document
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 목표 
+```{r}
+# if (!requireNamespace("devtools", quietly = TRUE)){install.packages("devtools")}
+# devtools::install_github("jbisanz/qiime2R")
+library(qiime2R)
+library(phyloseq)
+library(readr)
+library(stringr)
+library(ggplot2)
+library(decontam)
+library(ggpubr)
+library(vegan)
+library(dplyr)
+library(RColorBrewer)
+library(patchwork)
+library(tibble)
+
+source("./Script/functions.R")
+
+```
+
+
+```{r}
+getwd()  
+
+dir.create("./Phyloseq/")
+
+
+```
+
+
+# 1. import QIIME output
+
+
+```{r}
+# 16S
+phy <- qiime2R::qza_to_phyloseq(
+  features="../260811_DT_swab/Output/HN00182797/trimm_optimal_GG2/F270_R240.table.qza",
+  taxonomy="../260811_DT_swab/Output/HN00182797/06_taxonomy/taxonomy_SILVA.qza",
+  tree = "../260811_DT_swab/Output/HN00182797/07_phylogeny/rooted-tree.qza"
+  )
+
+
+```
+
+
+
+
+
+
+## 2) Make Metadata 
+```{r}
+meta <- read_table("./metadata/DT_metadata.tsv") |> data.frame()
+sample_names(phy)
+
+rownames(meta)<- meta$sample_id
+head(meta)
+sample_data(phy) <-sample_data(meta) 
+
+phy
+saveRDS(phy, "./Phyloseq/phy_F270R240_260812.rds")
+```
+
+# 2.preprocessing
+
+## 1) taxonomy name
+```{r}
+
+# tax$Genus %>% unique %>% sort
+
+# Original version  
+tax_clean <- function(ps) {
+  table <- data.frame(tax_table(ps))
+  tax <- table[,c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")]
+  tax
+  
+  # 2) NA -> ""
+  tax[is.na(tax)] <- ""
+  tax[tax=="__"] <- ""
+  tax[tax=="NA"] <- ""
+  tax[tax=="uncultured"] <- ""
+  
+  # 3) paste [Unclassified + NA] 
+  tax_clean <- data.frame(tax)
+  for (i in 1:nrow(tax_clean)){
+    if (tax_clean[i,7] != ""){
+      tax_clean$Species[i] <- paste0(tax_clean$Genus[i],"_", tax_clean$Species[i]) # database에 따라 다름 
+      # tax_clean$Species[i] <- str_replace(tax_clean$Species[i], " ", "_")
+    } else if (tax_clean[i,2] == ""){
+      kingdom <- paste0(tax_clean[i,1],"_k")
+      tax_clean[i, 2:7] <- kingdom
+    } else if (tax_clean[i,3] == ""){
+      phylum <- paste0( tax_clean[i,2],"_p")
+      tax_clean[i, 3:7] <- phylum
+    } else if (tax_clean[i,4] == ""){
+      class <- paste0( tax_clean[i,3],"_c")
+      tax_clean[i, 4:7] <- class
+    } else if (tax_clean[i,5] == ""){
+      order <- paste0( tax_clean[i,4],"_o")
+      tax_clean[i, 5:7] <- order
+    } else if (tax_clean[i,6] == ""){
+      family <- paste0( tax_clean[i,5],"_f")
+      tax_clean[i, 6:7] <- family
+    } else if (tax_clean[i,7] == ""){
+      tax_clean$Species[i] <- paste0(tax_clean$Genus[i],"_g")
+    }
+  }
+  print(tax_clean)
+  tax_table(ps) <- tax_table(as.matrix(tax_clean))
+  return(ps)
+}
+
+
+```
+
+
+```{r}
+tax <- tax_table(phy) |> data.frame()
+tax$Kingdom <- str_replace(tax$Kingdom, "d__", "")
+tax_table(phy)  <-tax_table(as.matrix(tax)) 
+
+```
+
+
+```{r}
+phy2 <- tax_clean(phy)
+
+
+tax <- tax_table(phy2) |> data.frame()
+View(tax)
+
+
+tax[tax$Phylum %in% "Proteobacteria", ]
+tax$Kingdom |> table()
+  # Bacteria  Eukaryota Unassigned 
+  #     2152          2          5 
+```
+
+
+## 2) Filter taxa
+```{r}
+# 1. Raw
+phy2 #  2159 taxa
+
+# 2. remove Unassigned and Eukaryota
+phy3 <- subset_taxa(phy2, Kingdom == "Bacteria")  # 2152 taxa and 55 samples
+
+# 3. remove chloroplast and mitochondria
+phy3 <- subset_taxa(phy3, Order != "Chloroplast")  #  2124 taxa and 55 samples 
+phy3 <- subset_taxa(phy3, Genus != "Mitochondria")  #  2108 taxa and 55 samples
+
+
+
+phy3
+# phyloseq-class experiment-level object
+# otu_table()   OTU Table:         [ 2108 taxa and 55 samples ]
+# sample_data() Sample Data:       [ 55 samples by 11 sample variables ]
+# tax_table()   Taxonomy Table:    [ 2108 taxa by 7 taxonomic ranks ]
+# phy_tree()    Phylogenetic Tree: [ 2108 tips and 2101 internal nodes ]
+
+
+# saveRDS(phy3, "./Phyloseq/phy_F270R240_260812_v3.rds")
+```
+
+# 3. Decontam 
+
+## 1) Pre-decontamination quality check
+## 2.1 Original Dataset
+
+```{r}
+summary(sample_sums(phy3))
+  # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   # 6422   15122   18372   18462   23050   31711 
+```
+
+
+### 2.1.2 Taxa prevalence between controls and true samples
+
+
+```{r}
+phy_control <- subset_samples(phy3, site_group == "negative-control") %>% prune_taxa(taxa_sums(.) > 0, .) 
+phy_sample <- subset_samples(phy3, site_group  != "negative-control") %>% prune_taxa(taxa_sums(.) > 0, .) 
+
+sample_sums(phy_control) %>% summary
+sample_sums(phy_sample) %>% summary
+  # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  # 12906   15524   16784   18200   21949   23836 
+  #  Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  #  6422   15101   18457   18488   23109   31711 
+```
+
+
+
+```{r, fig.width=10}
+
+control_df <- get_abundance_prevalence(phy_control)
+sample_df  <- get_abundance_prevalence(phy_sample)
+
+colnames(control_df) <- c("Abundance.Control", "Prevalence.Control")
+colnames(sample_df)  <- c("Abundance.Sample", "Prevalence.Sample")
+
+# Align ASV rows between the control and sample prevalence tables.
+sample_df <- sample_df[rownames(control_df), ]
+
+# Merge abundance and prevalence summaries for visualization.
+kA <- cbind(control_df, sample_df)
+
+
+kA$odds.sample  <- kA$Prevalence.Sample / kA$Prevalence.Control
+kA$odds.control <- kA$Prevalence.Control / kA$Prevalence.Sample
+kA$summarized <- kA$Abundance.Sample + kA$Abundance.Control
+
+
+p1 <- ggplot(kA, aes(odds.sample, summarized)) + geom_point() + scale_y_log10() + 
+      ggtitle("prevalence in samples / prevalence in controls")+ 
+      xlab("a) Enrichment in Samples")+ ylab("taxa_sum")
+p2 <- ggplot(kA, aes(odds.control, summarized)) + geom_point() + scale_y_log10() + 
+      ggtitle("prevalence in controls / prevalence in samples") + 
+      xlab("b) Enrichment in Controls") + ylab("taxa_sum")
+
+plot01 = ggarrange(p1, p2, ncol=2)
+plot01
+
+```
+
+
+
+## 2.2 Estimate the degree of control-associated signal
+
+### 2.2.1 PERMANOVA p-value before decontamination
+```{r}
+
+dist <- distance(phy3,  method = "wunifrac")
+meta <- phy3 %>% sample_data %>% data.frame
+meta[is.na(meta$control_status), "control_status" ] <- "control"
+
+# PERMANOVA
+set.seed(42)
+Perm <- adonis2(dist~control_status, data = meta, permutations=9999, method="wunifrac")
+           
+
+Perm.p <- Perm$`Pr(>F)`[1] 
+print(as.numeric(Perm.p)) # 0.319
+meta$SampleID <- meta$sample_id 
+sample_data(phy3) <- sample_data(meta)
+
+```
+
+
+## 2.3 Taxonomic composition before decontamination
+
+This step plots the taxonomic composition of controls and related samples. The result helphy3 identify which taxa are enriched in controls and whether these taxa are also present in true samples.
+
+
+```{r, fig.width=10}
+
+# 
+# 
+# phy3.nc <-  phy3 %>%
+#   subset_samples(., control_status %in% c("control")) %>%
+#   prune_taxa(taxa_sums(.)>0, .) %>%
+#   tax_glom(., "Genus") %>%
+#   transform_sample_counts(., function(x) x/sum(x))
+# 
+# phy3.nc.1per = filter_taxa(phy3.nc, function(x) mean(x) > .01, TRUE)   # 13
+# 
+# ## Species
+# out <- taxa_plot(melt = psmelt(phy3.nc),
+#           taxa = "Genus",
+#           tax_otu = taxa_names(phy3.nc.1per),
+#           x_axis = "SampleID",
+#           phylum_or = "Actinomycetota")
+# 
+# 
+# out$plot
+
+```
+
+
+
+
+
+```{r}
+
+
+phy3.gn.rel <-  phy3 %>%
+  prune_taxa(taxa_sums(.) > 0, .) %>%
+  tax_glom(., "Genus") %>%
+  transform_sample_counts(., function(x)
+    x / sum(x))
+
+phy3.gn.rel.1per = filter_taxa(phy3.gn.rel, function(x) mean(x) > .01, TRUE)   # 10 
+
+
+phy3.gn <-  phy3 %>% prune_taxa(taxa_sums(.) > 0, .) %>%
+  tax_glom(., "Genus") 
+
+ppp <- taxa_plot(melt = psmelt(phy3.gn),
+          taxa = "Genus",
+          tax_otu = taxa_names(phy3.gn.rel.1per),
+          x_axis = "Sample",
+          phylum_or = "Actinobacteriota") 
+ppp$plot
+```
+
+
+```{r}
+dff <- ppp$data$df
+taxa = "Genus"
+x_axis = "Sample"
+
+
+plot2 <- ggplot(dff, aes(x = !!rlang::sym(x_axis), y = Abundance, fill = !!rlang::sym(taxa))) +
+  geom_bar(stat = "identity") +
+  labs(y = "Read Count") +
+  theme_classic() +
+  theme(axis.text.x = element_blank(), 
+        plot.title = element_text(hjust = 0.5), 
+        legend.position = "right",  
+        legend.title = element_blank(),
+        axis.ticks.x = element_blank()) + 
+  scale_fill_manual(values = ppp$color)  + 
+  facet_grid(~ control_status  , scale = "free_x") +
+  ggh4x::force_panelsizes(cols = c(0.6, 1.4))
+
+  
+plot2
+
+
+
+```
+
+
+
+```{r, fig.width=12, fig.height=10}
+
+
+figureS1 <- (plot2 + theme(axis.text.x = element_blank())) / plot01  +
+   plot_layout(guides = "collect") +
+  plot_annotation(tag_levels = "A") &
+  theme(legend.position = "bottom")
+
+```
+
+# 3. Decontam analysis
+
+
+
+## 3.1 Library size check
+
+
+```{r}
+library(decontam)
+
+
+phy3 %>% 
+  sample_data() %>%
+  data.frame() %>%
+  dplyr::mutate(LibrarySize = sample_sums(phy3)) %>%
+  dplyr::arrange(LibrarySize) %>%
+  dplyr::mutate(index = seq(nrow(.))) %>%
+  ggplot(data=., aes(x=index, y=LibrarySize, color=control_status )) +
+  geom_point()
+
+
+
+```
+????
+
+
+
+## 3.2 Selection of decontam threshold
+
+
+```{r}
+
+sample_data(phy3)$is.neg <- sample_data(phy3)$control_status  == "control"
+
+
+```
+
+### 3.2.1 Distribution of decontam p-values
+
+
+```{r}
+
+# Run prevalence-based contaminant detection.
+contamdf01 <- isContaminant(phy3, method = "prevalence",
+                            neg = "is.neg", threshold = 0.1)  
+
+
+
+
+# Visualize the p-value distribution.
+p.pval <- ggplot(contamdf01, aes(x = p)) +
+  geom_histogram(bins = 50, fill = "grey30", color = "white") +
+  geom_vline(xintercept = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9), 
+             linetype = "dashed", color = "red") +
+  labs(# title = "Distribution of decontam p-values",
+       x = "p-value (contaminant probability)",
+       y = "Count") +
+  theme_bw()
+
+
+p.pval
+
+
+```
+
+
+### 3.2.2 summarize total ASV   
+```{r}
+
+summarize_asv_by_TC <- function(phy3, group_var = "control_status ") {
+  
+  # 1) Relative abundance 변환
+  phy3.rel <- transform_sample_counts(phy3, function(x) {
+    if (sum(x) == 0) x else x / sum(x)
+  })
+  
+  # 2) OTU table 정리: ASV x Sample 형태로 고정
+  otu <- as(otu_table(phy3.rel), "matrix")
+  if (!taxa_are_rows(phy3.rel)) otu <- t(otu)
+  
+  # 3) Metadata
+  meta <- as.data.frame(sample_data(phy3.rel))
+  
+  if (!group_var %in% colnames(meta)) {
+    stop(paste0(group_var, " column is not found in sample_data(phy3)."))
+  }
+  
+  # 4) 그룹별 샘플 지정
+  true_samples    <- rownames(meta)[meta[[group_var]] == FALSE]
+  control_samples <- rownames(meta)[meta[[group_var]] == TRUE]
+  
+  # 5) 그룹별 matrix
+  otu_true    <- otu[, true_samples, drop = FALSE]
+  otu_control <- otu[, control_samples, drop = FALSE]
+  
+  # 6) Taxonomy table
+  tax_df <- as.data.frame(tax_table(phy3)) %>%
+    rownames_to_column("ASV")
+  
+  # 7) ASV별 abundance / prevalence / prevalence percent
+  asv_summary <- tibble(
+    ASV = rownames(otu),
+    
+    Abundance.TrueSample = rowMeans(otu_true),
+    Abundance.Control    = rowMeans(otu_control),
+    
+    Prevalence.TrueSample = rowSums(otu_true > 0),
+    Prevalence.Control    = rowSums(otu_control > 0),
+    
+    PrevalencePercent.TrueSample = rowSums(otu_true > 0) / length(true_samples) * 100,
+    PrevalencePercent.Control    = rowSums(otu_control > 0) / length(control_samples) * 100
+  )
+  
+  # 8) Taxonomy와 결합
+  asv_summary <- tax_df %>%
+    left_join(asv_summary, by = "ASV")
+  
+  return(asv_summary)
+}
+```
+
+
+```{r}
+asv_summary <- summarize_asv_by_TC(phy3, group_var = "is.neg")
+asv_summary
+```
+
+### 3.2.2 Sensitivity analysis across thresholds 0.1-0.5
+
+This loop repeats contaminant detection at thresholds from 0.1 to 0.5. For each threshold, it records the number of contaminant ASVs, contaminant relative abundance, retained reads, retained ASVs, and the PERMANOVA effect of control status after filtering. These outputs support a transparent threshold decision.
+
+
+
+```{r}
+# Sun Mar 22 17:55:54 2026 ------------------------------
+
+thresholds <- c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
+
+permanova_results <- data.frame()
+mlt_sample <- psmelt(phy3)
+
+for (th in thresholds) {
+  
+  contamdf_th <- isContaminant(phy3,
+                               method    = "prevalence",
+                               neg       = "is.neg",
+                               threshold = th)
+  
+  contam_asvs <- rownames(contamdf_th)[contamdf_th$contaminant]
+  
+  col_name <- paste0("contam_th", gsub("\\.", "", format(th, nsmall = 1)))
+  asv_summary[[col_name]] <- asv_summary$ASV %in% contam_asvs
+  
+  # Relative abundance of ASVs flagged as contaminants in true samples.
+  contam_relab     <- mlt_sample %>% filter(OTU %in% contam_asvs) %>% pull(Abundance) %>% sum()
+  total_relab      <- mlt_sample %>% pull(Abundance) %>% sum()
+  contam_relab_pct <- contam_relab / total_relab * 100
+  
+  # ── Reads retained
+  phy3_clean    <- prune_taxa(!contamdf_th$contaminant, phy3)
+  phy3_skin_all <- subset_samples(phy3,       is.neg == FALSE)
+  phy3_ctrl_all <- subset_samples(phy3,       is.neg == TRUE)
+  phy3_skin     <- subset_samples(phy3_clean, is.neg == FALSE)
+  phy3_ctrl     <- subset_samples(phy3_clean, is.neg == TRUE)
+  
+  reads_retained_total <- sum(otu_table(phy3_clean))    / sum(otu_table(phy3))          * 100
+  reads_retained_skin  <- sum(otu_table(phy3_skin))     / sum(otu_table(phy3_skin_all)) * 100
+  reads_retained_ctrl  <- sum(otu_table(phy3_ctrl))     / sum(otu_table(phy3_ctrl_all)) * 100
+  
+  # ── ASV retained (개수 기준)
+  total_asv        <- ntaxa(phy3)
+  total_asv_skin   <- ntaxa(phy3_skin_all)   # skin 샘플에 존재하는 ASV
+  total_asv_ctrl   <- ntaxa(phy3_ctrl_all)   # control 샘플에 존재하는 ASV
+
+  # 제거 후 각 그룹에서 살아있는 ASV (해당 그룹에서 prevalence > 0)
+  asv_retained_total <- ntaxa(phy3_clean)
+  
+  # skin 샘플에서 실제로 존재하는 ASV (count > 0)
+  asv_retained_skin <- sum(taxa_sums(phy3_skin) > 0)
+  
+  asv_total_skin <- sum(taxa_sums(phy3_skin_all) > 0)
+  
+  asv_retained_ctrl <- sum(taxa_sums(phy3_ctrl) > 0)
+  
+  asv_total_ctrl <- sum(taxa_sums(phy3_ctrl_all) > 0)
+  
+  asv_retained_total_pct <- asv_retained_total / total_asv        * 100
+  asv_retained_skin_pct  <- asv_retained_skin  / asv_total_skin   * 100
+  asv_retained_ctrl_pct  <- asv_retained_ctrl  / asv_total_ctrl   * 100
+  
+  # ── PERMANOVA
+  otu_mat <- data.frame(otu_table(phy3_clean))
+  
+  if (!taxa_are_rows(phy3_clean)) otu_mat <- t(otu_mat)
+  otu_mat <- t(otu_mat)
+  meta    <- data.frame(sample_data(phy3_clean))
+  
+  dist_bc <- vegdist(otu_mat, method = "bray")
+  set.seed(123)
+  perm <- adonis2(dist_bc ~ is.neg, data = meta, permutations = 9999)
+  
+  permanova_results <- rbind(permanova_results, data.frame(
+    threshold              = th,
+    n_contam_ASV           = length(contam_asvs),
+    contam_relab_pct       = round(contam_relab_pct,       3),
+    
+    # reads retained
+    reads_retained_total   = round(reads_retained_total,   3),
+    reads_retained_skin    = round(reads_retained_skin,    3),
+    reads_retained_ctrl    = round(reads_retained_ctrl,    3),
+    
+    # ASV retained
+    asv_retained_total_pct = round(asv_retained_total_pct, 3),
+    asv_retained_skin_pct  = round(asv_retained_skin_pct,  3),
+    asv_retained_ctrl_pct  = round(asv_retained_ctrl_pct,  3),
+    R2_is_control          = round(perm$R2[1], 4),
+    p_is_control           = perm$`Pr(>F)`[1]
+  ))
+}
+
+
+```
+
+```{r}
+
+head(permanova_results)
+head(asv_summary)
+
+write.table(asv_summary,
+            "./Tables/Decontam_summary.txt", sep = "\t")
+write.table(permanova_results,
+            "./Tables/Decontam_permanova_summary.txt", sep = "\t")
+
+
+permanova_results
+```
+
+### 3.2.3 Reads and ASVs retained by threshold
+
+This section visualizes how many reads and ASVs remain after applying each threshold. A suitable threshold should remove control-associated contaminants while retaining most biological reads and ASVs from true samples.
+
+```{r}
+
+# ── Long format 변환
+reads_long <- permanova_results %>%
+  dplyr::select(threshold,
+         Total   = reads_retained_total,
+         Skin    = reads_retained_skin,
+         Control = reads_retained_ctrl) %>%
+  tidyr::pivot_longer(-threshold, names_to = "sample_type", values_to = "value") %>%
+  dplyr::mutate(metric = "Reads retained (%)")
+
+asv_long <- permanova_results %>%
+  dplyr::select(threshold,
+         Total   = asv_retained_total_pct,
+         Skin    = asv_retained_skin_pct,
+         Control = asv_retained_ctrl_pct) %>%
+  tidyr::pivot_longer(-threshold, names_to = "sample_type", values_to = "value") %>%
+  dplyr::mutate(metric = "ASVs retained (%)")
+
+type_colors <- c(Total = "black", Skin = "steelblue", Control = "tomato")
+
+```
+
+
+```{r}
+
+p_reads <- ggplot(reads_long, aes(x = threshold, y = value,
+                                   color = sample_type,
+                                   shape = sample_type)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  scale_color_manual(values = type_colors, name = "Sample type") +
+  scale_shape_manual(values = c(Total = 16, Skin = 17, Control = 15),
+                     name = "Sample type") +
+  scale_x_continuous(breaks = thresholds) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 20)) +
+  labs(x = "Threshold", y = "Reads retained (%)") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+# ── Panel c: ASVs retained
+p_asvs <- ggplot(asv_long, aes(x = threshold, y = value,
+                                color = sample_type,
+                                shape = sample_type)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  scale_color_manual(values = type_colors, name = "Sample type") +
+  scale_shape_manual(values = c(Total = 16, Skin = 17, Control = 15),
+                     name = "Sample type") +
+  scale_x_continuous(breaks = thresholds) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 20)) +
+  labs(x = "Threshold", y = "ASVs retained (%)") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+p_reads
+p_asvs
+```
+
+
+
+
+### 3.2.4 top Genus 
+
+
+```{r}
+
+
+
+# Visualize the genus-level taxonomy of ASVs removed at threshold 0.1.
+asv_removed <- asv_summary %>%
+  filter(contam_th05 == TRUE) %>%
+  count(Genus) %>%
+  arrange(desc(n))
+
+p.genus1 <- ggplot(asv_removed, aes(x = reorder(Genus, n), y = n)) +
+  geom_col(fill = "grey30") +
+  coord_flip() +
+  labs(x = "Genus", y = "Number of ASVs") +
+  theme_bw() +
+  theme(axis.text.y = element_text(size = 8))
+p.genus1
+
+
+```
+
+
+```{r}
+p.genus1
+```
+
+
+```{r}
+
+```
+
+
+
+
+## 3.3 Result inspection using threshold 0.5
+
+
+
+```{r}
+
+phy3.noncontam.prev <- prune_taxa(asv_summary[asv_summary$contam_th05 == FALSE, "ASV"], phy3)
+phy3.noncontam.prev #  2001 taxa and 55 samples 
+
+phy3.pa <- transform_sample_counts(phy3, function(abund) 1 * (abund > 0))
+phy3.pa.neg <- prune_samples(sample_data(phy3.pa)$"control_status"  == "control", phy3.pa)
+phy3.pa.pos <- prune_samples(sample_data(phy3.pa)$"control_status"  == "sample", phy3.pa)
+
+
+# Make data.frame of prevalence in positive and negative samples
+df.pa <- data.frame(
+  pa.pos = taxa_sums(phy3.pa.pos),
+  pa.neg = taxa_sums(phy3.pa.neg),
+  contaminant = asv_summary$contam_th05 == TRUE
+)
+
+
+plot04 <- ggplot(data = df.pa, 
+       aes(x = pa.neg, 
+           y = pa.pos, 
+           color = contaminant)) + 
+  geom_point() +
+  xlab("Prevalence (Negative Controls)") + 
+  ylab("Prevalence (True Samples)")
+
+
+plot04
+```
+
+```{r}
+phy3 %>% subset_samples(control_status == "control")  %>% sample_sums
+# 001NCXUSw 002NCXUSw 003NCXUSw 004NCXUSw 005NCXUSw 
+#     21949     23836     16784     15524     12906 
+
+phy3.noncontam.prev %>% subset_samples(control_status   == "sample")  %>% sample_sums
+#   001AcCUSw 001AcLUSw_3 001AcLUSw_4 001AcRUSw_1 001AcRUSw_2   001FhCUSw 001FhLUSw_3 001FhLUSw_4 001FhRUSw_1 001FhRUSw_2   002AcCUSw 002AcLUSw_3 002AcLUSw_4 002AcRUSw_1 002AcRUSw_2   002FhCUSw 
+#       17606       17993       19654       22970       16405       21232       24445       15076       31707       26960        7977       22663        6423       22337       19939       18360 
+# 002FhLUSw_3 002FhLUSw_4 002FhRUSw_1 002FhRUSw_2   003AcCUSw 003AcLUSw_3 003AcLUSw_4 003AcRUSw_1 003AcRUSw_2   003FhCUSw 003FhLUSw_3 003FhLUSw_4 003FhRUSw_1 003FhRUSw_2   004AcCUSw 004AcLUSw_3 
+#       19696       20113       12325       25903       12205        5876       16910       14708        7525        6251       12344       10540        7479        9047       17051       22236 
+# 004AcLUSw_4 004AcRUSw_1 004AcRUSw_2   004FhCUSw 004FhLUSw_3 004FhLUSw_4 004FhRUSw_1 004FhRUSw_2   005AcCUSw 005AcLUSw_3 005AcLUSw_4 005AcRUSw_1 005AcRUSw_2   005FhCUSw 005FhLUSw_3 005FhLUSw_4 
+#       20965       18880       17221       21625       10531       25735       13227       14460       15867       12305       12616       17736       18014       20935       26325       11770 
+# 005FhRUSw_1 005FhRUSw_2 
+#       21479       15502 
+
+```
+
+
+
+
+### 3.3.1 Relative abundance of ASVs removed at threshold 0.1
+
+This step calculates the proportion of total relative abundance assigned to ASVs flagged as contaminants. A low percentage indicates that contaminant ASVs account for only a small fraction of the overall community signal.
+
+```{r}
+phy3.rel <-  phy3%>%  transform_sample_counts(., function(x) x/sum(x))
+
+mlt <- psmelt(phy3.rel)
+contam_asvs <- prune_taxa(asv_summary$contam_th05 == TRUE, phy3) %>% taxa_names()
+
+
+
+a <- mlt[mlt$OTU %in% contam_asvs , "Abundance"] %>% sum
+a  #  8.067039
+b <- mlt[, "Abundance"] %>% sum 
+a/b*100 #  14.66734
+```
+
+
+### 3.3.2 Taxonomic composition after prevalence-based filtering
+
+```{r}
+
+
+phy3.nc.gn <-  phy3.noncontam.prev %>%
+  prune_taxa(taxa_sums(.)>0, .) %>%
+  tax_glom(., "Genus") 
+
+phy3.nc.gn.rel <-  phy3.nc.gn %>%
+  transform_sample_counts(., function(x) x/sum(x))
+
+
+phy3.nc.1per = filter_taxa(phy3.nc.gn.rel, function(x) mean(x) > .01, TRUE)   #  9 taxa
+
+
+pp.nc <- taxa_plot(melt = psmelt(phy3.nc.gn),
+          taxa = "Genus",
+          tax_otu = taxa_names(phy3.nc.1per),
+          x_axis = "Sample",
+          phylum_or = "Actinobacteriota") 
+
+
+pp.nc$plot   + facet_grid(~ control_status, scale = "free_x") 
+
+
+```
+
+
+
+```{r}
+
+pp.nc$data$df
+dff2 <- pp.nc$data$df
+taxa = "Genus"
+x_axis = "Sample"
+
+
+pp.nc2<- ggplot(dff2, aes(x = !!rlang::sym(x_axis), y = Abundance, fill = !!rlang::sym(taxa))) +
+  geom_bar(stat = "identity") +
+  labs(y = "Read Count") +
+  theme_classic() +
+  theme(axis.text.x = element_blank(), 
+        plot.title = element_text(hjust = 0.5), 
+        legend.position = "right",  
+        legend.title = element_blank(),
+        axis.ticks.x = element_blank()) + 
+  scale_fill_manual(values = pp.nc$color)  + 
+  facet_grid(~ control_status  , scale = "free_x") +
+  ggh4x::force_panelsizes(cols = c(0.6, 1.4))
+
+  
+pp.nc2
+
+
+
+```
+
+
+
+```{r}
+
+
+# Combine the threshold sensitivity panels into one supplementary figure.
+
+figureS2 <- ((p_reads |  p_asvs | p.pval)/(plot04| p.genus1))  +
+  plot_layout(heights = c(0.7, 1.1), guides = "collect") +
+  plot_annotation(tag_levels = "A") &
+  theme(legend.position = "bottom")
+
+
+figureS3 <- (plot2 + theme(axis.text.x = element_blank())) /
+         (pp.nc2 + theme(axis.text.x = element_blank())) +
+  plot_layout(guides = "collect") +
+  plot_annotation(tag_levels = "A") 
+
+```
+
+
+
+
+# 4. Final decision: use decontam threshold 0.1
+
+Based on the sensitivity analysis, threshold 0.1 was selected for the final decontaminated phyloseq object. This threshold removes ASVs most strongly enriched in negative controls while preserving most reads and ASVs in true skin samples.
+
+
+## 1) save figure 
+```{r}
+
+ggsave(plot = figureS1,
+       filename = "./Figures/FigureS1.png",  
+       width = 12, height = 8)
+
+
+ggsave(plot = figureS2,
+       filename = "./Figures/FigureS2.png", 
+       width = 12, height = 10)
+
+ggsave(plot = figureS3,
+       filename = "./Figures/FigureS3.png", 
+       width = 12, height = 8)
+
+```
+
+
+### Save RDS
+```{r}
+saveRDS(phy3.noncontam.prev, "./Phyloseq/phy_F270R240_260812_v4.rds")
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,56 @@
+sample_id	subject_id	sample_code	study_type	swab_type	swab_type2	gender	age	swab_method	site_group	site_id	control_status
+001AcRUSw_1	S001	AA1	DT	Copan	Copan	M	35	Sw	Antecubital	Ac	sample
+001AcRUSw_2	S001	AA2	DT	Puritan	Puritan_gel	M	35	Sw	Antecubital	Ac	sample
+001AcLUSw_3	S001	AA3	DT	Puritan	Puritan_buffer	M	35	Sw	Antecubital	Ac	sample
+001AcLUSw_4	S001	AA4	DT	Omni	Omni	M	35	Sw	Antecubital	Ac	sample
+001AcCUSw	S001	AA5	DT	Eswab	Eswab	M	35	Sw	Antecubital	Ac	sample
+001FhRUSw_1	S001	AF1	DT	Copan	Copan	M	35	Sw	Forehead	Fh	sample
+001FhRUSw_2	S001	AF2	DT	Puritan	Puritan_gel	M	35	Sw	Forehead	Fh	sample
+001FhLUSw_3	S001	AF3	DT	Puritan	Puritan_buffer	M	35	Sw	Forehead	Fh	sample
+001FhLUSw_4	S001	AF4	DT	Omni	Omni	M	35	Sw	Forehead	Fh	sample
+001FhCUSw	S001	AF5	DT	Eswab	Eswab	M	35	Sw	Forehead	Fh	sample
+002AcRUSw_1	S002	BA1	DT	Copan	Copan	M	27	Sw	Antecubital	Ac	sample
+002AcRUSw_2	S002	BA2	DT	Puritan	Puritan_gel	M	27	Sw	Antecubital	Ac	sample
+002AcLUSw_3	S002	BA3	DT	Puritan	Puritan_buffer	M	27	Sw	Antecubital	Ac	sample
+002AcLUSw_4	S002	BA4	DT	Omni	Omni	M	27	Sw	Antecubital	Ac	sample
+002AcCUSw	S002	BA5	DT	Eswab	Eswab	M	27	Sw	Antecubital	Ac	sample
+002FhRUSw_1	S002	BF1	DT	Copan	Copan	M	27	Sw	Forehead	Fh	sample
+002FhRUSw_2	S002	BF2	DT	Puritan	Puritan_gel	M	27	Sw	Forehead	Fh	sample
+002FhLUSw_3	S002	BF3	DT	Puritan	Puritan_buffer	M	27	Sw	Forehead	Fh	sample
+002FhLUSw_4	S002	BF4	DT	Omni	Omni	M	27	Sw	Forehead	Fh	sample
+002FhCUSw	S002	BF5	DT	Eswab	Eswab	M	27	Sw	Forehead	Fh	sample
+003AcRUSw_1	S003	CA1	DT	Copan	Copan	M	37	Sw	Antecubital	Ac	sample
+003AcRUSw_2	S003	CA2	DT	Puritan	Puritan_gel	M	37	Sw	Antecubital	Ac	sample
+003AcLUSw_3	S003	CA3	DT	Puritan	Puritan_buffer	M	37	Sw	Antecubital	Ac	sample
+003AcLUSw_4	S003	CA4	DT	Omni	Omni	M	37	Sw	Antecubital	Ac	sample
+003AcCUSw	S003	CA5	DT	Eswab	Eswab	M	37	Sw	Antecubital	Ac	sample
+003FhRUSw_1	S003	CF1	DT	Copan	Copan	M	37	Sw	Forehead	Fh	sample
+003FhRUSw_2	S003	CF2	DT	Puritan	Puritan_gel	M	37	Sw	Forehead	Fh	sample
+003FhLUSw_3	S003	CF3	DT	Puritan	Puritan_buffer	M	37	Sw	Forehead	Fh	sample
+003FhLUSw_4	S003	CF4	DT	Omni	Omni	M	37	Sw	Forehead	Fh	sample
+003FhCUSw	S003	CF5	DT	Eswab	Eswab	M	37	Sw	Forehead	Fh	sample
+004AcRUSw_1	S004	DA1	DT	Copan	Copan	M	27	Sw	Antecubital	Ac	sample
+004AcRUSw_2	S004	DA2	DT	Puritan	Puritan_gel	M	27	Sw	Antecubital	Ac	sample
+004AcLUSw_3	S004	DA3	DT	Puritan	Puritan_buffer	M	27	Sw	Antecubital	Ac	sample
+004AcLUSw_4	S004	DA4	DT	Omni	Omni	M	27	Sw	Antecubital	Ac	sample
+004AcCUSw	S004	DA5	DT	Eswab	Eswab	M	27	Sw	Antecubital	Ac	sample
+004FhRUSw_1	S004	DF1	DT	Copan	Copan	M	27	Sw	Forehead	Fh	sample
+004FhRUSw_2	S004	DF2	DT	Puritan	Puritan_gel	M	27	Sw	Forehead	Fh	sample
+004FhLUSw_3	S004	DF3	DT	Puritan	Puritan_buffer	M	27	Sw	Forehead	Fh	sample
+004FhLUSw_4	S004	DF4	DT	Omni	Omni	M	27	Sw	Forehead	Fh	sample
+004FhCUSw	S004	DF5	DT	Eswab	Eswab	M	27	Sw	Forehead	Fh	sample
+005AcRUSw_1	S005	EA1	DT	Copan	Copan	F	26	Sw	Antecubital	Ac	sample
+005AcRUSw_2	S005	EA2	DT	Puritan	Puritan_gel	F	26	Sw	Antecubital	Ac	sample
+005AcLUSw_3	S005	EA3	DT	Puritan	Puritan_buffer	F	26	Sw	Antecubital	Ac	sample
+005AcLUSw_4	S005	EA4	DT	Omni	Omni	F	26	Sw	Antecubital	Ac	sample
+005AcCUSw	S005	EA5	DT	Eswab	Eswab	F	26	Sw	Antecubital	Ac	sample
+005FhRUSw_1	S005	EF1	DT	Copan	Copan	F	26	Sw	Forehead	Fh	sample
+005FhRUSw_2	S005	EF2	DT	Puritan	Puritan_gel	F	26	Sw	Forehead	Fh	sample
+005FhLUSw_3	S005	EF3	DT	Puritan	Puritan_buffer	F	26	Sw	Forehead	Fh	sample
+005FhLUSw_4	S005	EF4	DT	Omni	Omni	F	26	Sw	Forehead	Fh	sample
+005FhCUSw	S005	EF5	DT	Eswab	Eswab	F	26	Sw	Forehead	Fh	sample
+001NCXUSw	Control	NC1	DT	Copan	Copan			Sw	NC	NC	negative-control
+002NCXUSw	Control	NC2	DT	Puritan	Puritan_gel			Sw	NC	NC	negative-control
+003NCXUSw	Control	NC3	DT	Puritan	Puritan_buffer			Sw	NC	NC	negative-control
+004NCXUSw	Control	NC4	DT	Omni	Omni			Sw	NC	NC	negative-control
+005NCXUSw	Control	NC5	DT	Eswab	Eswab			Sw	NC	NC	negative-control
