@@ -1,0 +1,1104 @@
+---
+title: "Filtering sensitivity analysis for the DT skin-swab study"
+author: "DT Swab Study"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.align = "center"
+)
+```
+
+# Analysis objective
+
+This analysis evaluates how additional rare-feature filtering changes data retention,
+alpha diversity, beta diversity, sampling-system effects, and feature sharing after
+the prevalence-based decontamination step used in the main analysis. The saved
+post-decontamination phyloseq object is the common starting point for every filter.
+
+```{r packages}
+suppressPackageStartupMessages({
+  library(phyloseq)
+  library(vegan)
+  library(dplyr)
+  library(tidyr)
+  library(tibble)
+  library(ggplot2)
+  library(patchwork)
+  library(ComplexUpset)
+  library(pheatmap)
+  library(RColorBrewer)
+  library(ggpubr)
+})
+
+set.seed(42)
+
+out_dir <- file.path(getwd(), "Filtering_sensitivity_output")
+fig_dir <- file.path(out_dir, "Figures")
+tab_dir <- file.path(out_dir, "Tables")
+dir.create(fig_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(tab_dir, recursive = TRUE, showWarnings = FALSE)
+
+filter_levels <- c(
+  "No additional filter",
+  "Remove count <=1",
+  "Remove count <=2",
+  "Remove count <=10",
+  "Prevalence >=2 samples",
+  "Prevalence >=5 samples",
+  "Prevalence >=10% samples",
+  "Mean abundance >=0.1%",
+  "Mean abundance >=1%"
+)
+
+filter_ids <- c(
+  "no_filter",
+  "remove_count_le_1",
+  "remove_count_le_2",
+  "remove_count_le_10",
+  "prevalence_ge_2",
+  "prevalence_ge_5",
+  "prevalence_ge_10pct",
+  "mean_abundance_ge_0.1pct",
+  "mean_abundance_ge_1pct"
+)
+
+filter_labels <- setNames(filter_levels, filter_ids)
+
+swab_key <- data.frame(
+  swab_type2 = c("Copan", "Puritan_gel", "Puritan_buffer", "Omni", "Eswab"),
+  Type = factor(paste0("Type ", 1:5), levels = paste0("Type ", 1:5))
+)
+
+type_col <- setNames(brewer.pal(5, "Set2"), paste0("Type ", 1:5))
+metric_col <- c(
+  "ASV" = "#377eb8",
+  "Genus" = "#e41a1c",
+  "Reads" = "#4daf4a"
+)
+
+theme_ms <- theme_bw(base_size = 9) +
+  theme(
+    axis.title = element_text(face = "bold", colour = "black"),
+    axis.text = element_text(colour = "black"),
+    panel.grid.minor = element_blank(),
+    strip.background = element_rect(fill = "white", colour = "black"),
+    strip.text = element_text(face = "bold"),
+    legend.title = element_text(face = "bold"),
+    plot.title = element_text(face = "bold"),
+    plot.margin = margin(6, 6, 6, 6)
+  )
+
+save_plot <- function(plot, stem, width, height) {
+  ggsave(
+    file.path(fig_dir, paste0(stem, ".png")), plot,
+    width = width, height = height, dpi = 600,
+    bg = "white", limitsize = FALSE
+  )
+  ggsave(
+    file.path(fig_dir, paste0(stem, ".tiff")), plot,
+    width = width, height = height, dpi = 600,
+    compression = "lzw", bg = "white", limitsize = FALSE
+  )
+}
+```
+
+# Input and filter definitions
+
+```{r input-and-filters}
+phy <- readRDS("./Phyloseq/phy_F270R240_260812_v4.rds")
+phy <- subset_samples(phy, control_status == "sample") %>%
+  prune_taxa(taxa_sums(.) > 0, .)
+
+target_depth <- 5876L
+
+otu_matrix <- function(ps) {
+  otu <- as(otu_table(ps), "matrix")
+  if (!taxa_are_rows(ps)) otu <- t(otu)
+  otu
+}
+
+augment_metadata <- function(ps) {
+  md <- data.frame(sample_data(ps), check.names = FALSE) %>%
+    rownames_to_column("sample_name") %>%
+    left_join(swab_key, by = "swab_type2") %>%
+    mutate(
+      collection_medium = case_when(
+        swab_type2 %in% c("Puritan_gel", "Copan") ~ "Gel",
+        swab_type2 == "Puritan_buffer" ~ "Puritan buffer",
+        swab_type2 == "Omni" ~ "Omni buffer",
+        swab_type2 == "Eswab" ~ "ESwab buffer",
+        TRUE ~ NA_character_
+      ),
+      swab_material = case_when(
+        swab_type == "Eswab" ~ "Nylon",
+        swab_type == "Omni" ~ "Polyester",
+        swab_type == "Puritan" ~ "Polyurethane foam",
+        swab_type == "Copan" ~ "Rayon",
+        TRUE ~ NA_character_
+      )
+    )
+  rownames(md) <- md$sample_name
+  md
+}
+
+apply_feature_filter <- function(ps, filter_id) {
+  otu <- otu_matrix(ps)
+  total_count <- rowSums(otu)
+  prevalence <- rowSums(otu > 0)
+  rel <- sweep(otu, 2, colSums(otu), "/")
+  rel[!is.finite(rel)] <- 0
+  mean_rel_pct <- rowMeans(rel) * 100
+
+  keep <- switch(
+    filter_id,
+    no_filter = total_count > 0,
+    remove_count_le_1 = total_count > 1,
+    remove_count_le_2 = total_count > 2,
+    remove_count_le_10 = total_count > 10,
+    prevalence_ge_2 = prevalence >= 2,
+    prevalence_ge_5 = prevalence >= 5,
+    prevalence_ge_10pct = prevalence >= ceiling(0.10 * nsamples(ps)),
+    `mean_abundance_ge_0.1pct` = mean_rel_pct >= 0.1,
+    `mean_abundance_ge_1pct` = mean_rel_pct >= 1,
+    stop("Unknown filter: ", filter_id)
+  )
+
+  prune_taxa(keep, ps) %>% prune_taxa(taxa_sums(.) > 0, .)
+}
+
+filtered_ps <- setNames(
+  lapply(filter_ids, function(id) apply_feature_filter(phy, id)),
+  filter_ids
+)
+
+rarefy_fixed_depth <- function(ps, depth = target_depth) {
+  keep_samples <- sample_names(ps)[sample_sums(ps) >= depth]
+  if (length(keep_samples) < 2) return(NULL)
+  ps_keep <- prune_samples(keep_samples, ps) %>%
+    prune_taxa(taxa_sums(.) > 0, .)
+  set.seed(42)
+  rarefy_even_depth(
+    ps_keep,
+    sample.size = depth,
+    rngseed = 42,
+    replace = FALSE,
+    trimOTUs = TRUE,
+    verbose = FALSE
+  )
+}
+
+filtered_rar <- lapply(filtered_ps, rarefy_fixed_depth)
+```
+
+# Data retention
+
+```{r retention-summary}
+base_reads <- sum(sample_sums(phy))
+base_asvs <- ntaxa(phy)
+
+retention_summary <- bind_rows(lapply(filter_ids, function(id) {
+  ps <- filtered_ps[[id]]
+  depths <- sample_sums(ps)
+  ps_rar <- filtered_rar[[id]]
+  tibble(
+    filter_id = id,
+    filter = filter_labels[[id]],
+    retained_asvs = ntaxa(ps),
+    removed_asvs = base_asvs - ntaxa(ps),
+    asv_retained_pct = 100 * ntaxa(ps) / base_asvs,
+    retained_reads = sum(depths),
+    removed_reads = base_reads - sum(depths),
+    read_retained_pct = 100 * sum(depths) / base_reads,
+    samples_total = nsamples(ps),
+    samples_below_5876 = sum(depths < target_depth),
+    samples_rarefied_5876 = if (is.null(ps_rar)) 0L else nsamples(ps_rar),
+    depth_min = min(depths),
+    depth_median = median(depths),
+    depth_max = max(depths)
+  )
+})) %>%
+  mutate(filter = factor(filter, levels = filter_levels))
+
+write.csv(
+  retention_summary %>% mutate(filter = as.character(filter)),
+  file.path(tab_dir, "filtering_retention_summary.csv"),
+  row.names = FALSE
+)
+
+retention_long <- retention_summary %>%
+  select(filter, asv_retained_pct, read_retained_pct) %>%
+  pivot_longer(-filter, names_to = "metric", values_to = "retained_pct") %>%
+  mutate(
+    metric = recode(
+      metric,
+      asv_retained_pct = "ASV",
+      read_retained_pct = "Reads"
+    )
+  )
+
+p_retention <- ggplot(
+  retention_long,
+  aes(filter, retained_pct, colour = metric, group = metric)
+) +
+  geom_hline(yintercept = 100, colour = "grey80", linewidth = 0.4) +
+  geom_line(linewidth = 0.7) +
+  geom_point(size = 2) +
+  scale_colour_manual(values = metric_col[c("ASV", "Reads")]) +
+  scale_y_continuous(limits = c(0, 101)) +
+  labs(
+    x = NULL,
+    y = "Retained (%)",
+    colour = "Metric",
+    title = "Data retained after additional feature filtering"
+  ) +
+  theme_ms +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+save_plot(p_retention, "Figure1_Filtering_retention", 8.5, 4.8)
+retention_summary
+```
+
+# Alpha-diversity sensitivity
+
+```{r alpha-diversity}
+alpha_values <- bind_rows(lapply(filter_ids, function(id) {
+  ps <- filtered_rar[[id]]
+  if (is.null(ps)) return(tibble())
+  estimate_richness(ps, measures = c("Shannon", "Observed")) %>%
+    rownames_to_column("sample_name") %>%
+    mutate(sample_name = sub("^X", "", sample_name)) %>%
+    left_join(
+      augment_metadata(ps) %>%
+        select(sample_name, subject_id, site_group, swab_type2, Type),
+      by = "sample_name"
+    ) %>%
+    mutate(filter_id = id, filter = filter_labels[[id]])
+})) %>%
+  mutate(filter = factor(filter, levels = filter_levels))
+
+pairwise_wilcox_tidy <- function(df, metric_name) {
+  empty_result <- tibble(
+    group1 = character(),
+    group2 = character(),
+    p_adjusted = numeric()
+  )
+  if (nrow(df) == 0 || n_distinct(df$Type[!is.na(df$Type)]) < 2) {
+    return(empty_result)
+  }
+  pw <- pairwise.wilcox.test(
+    x = df[[metric_name]],
+    g = df$Type,
+    p.adjust.method = "bonferroni",
+    exact = FALSE
+  )$p.value
+  if (is.null(pw)) return(empty_result)
+  as.data.frame(as.table(pw), stringsAsFactors = FALSE) %>%
+    filter(!is.na(Freq)) %>%
+    transmute(group1 = as.character(Var1), group2 = as.character(Var2), p_adjusted = Freq)
+}
+
+alpha_pairwise <- bind_rows(lapply(filter_ids, function(id) {
+  bind_rows(lapply(c("Antecubital", "Forehead"), function(site) {
+    dat <- alpha_values %>%
+      filter(filter_id == id, site_group == site)
+    bind_rows(lapply(c("Shannon", "Observed"), function(metric_name) {
+      pairwise_wilcox_tidy(dat, metric_name) %>%
+        mutate(
+          filter_id = id,
+          filter = filter_labels[[id]],
+          site_group = site,
+          metric = metric_name,
+          significant_0.05 = p_adjusted < 0.05
+        )
+    }))
+  }))
+}))
+
+alpha_significance_summary <- alpha_pairwise %>%
+  group_by(filter_id, filter, site_group, metric) %>%
+  summarise(
+    pairwise_tests = n(),
+    significant_pairs = sum(significant_0.05, na.rm = TRUE),
+    minimum_adjusted_p = min(p_adjusted, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+write.csv(alpha_values, file.path(tab_dir, "alpha_diversity_values.csv"), row.names = FALSE)
+write.csv(alpha_pairwise, file.path(tab_dir, "alpha_pairwise_wilcoxon.csv"), row.names = FALSE)
+write.csv(
+  alpha_significance_summary,
+  file.path(tab_dir, "alpha_pairwise_significance_summary.csv"),
+  row.names = FALSE
+)
+
+alpha_significance_summary
+```
+
+# PERMANOVA sensitivity
+
+Participant identity is tested without participant-restricted permutations. Tests
+for anatomical site, sampling system, swab-tip material, and collection medium use
+participant identity as the permutation stratum, matching the repeated-measures
+structure used in the revised analysis.
+
+```{r permanova}
+distance_labels <- c(
+  wunifrac = "Weighted UniFrac",
+  unifrac = "Unweighted UniFrac",
+  bray = "Bray-Curtis"
+)
+
+variable_labels <- c(
+  subject_id = "Participant identity",
+  site_group = "Anatomical site",
+  swab_type2 = "Sampling system",
+  swab_material = "Swab-tip material",
+  collection_medium = "Collection medium"
+)
+
+run_adonis_term <- function(dist_obj, md, variable, seed_value = 42L) {
+  formula_obj <- reformulate(variable, response = "dist_obj")
+  set.seed(seed_value)
+  fit <- tryCatch(
+    {
+      if (variable == "subject_id") {
+        adonis2(formula_obj, data = md, permutations = 9999)
+      } else {
+        adonis2(
+          formula_obj,
+          data = md,
+          permutations = 9999,
+          strata = md$subject_id
+        )
+      }
+    },
+    error = function(e) e
+  )
+  if (inherits(fit, "error")) {
+    return(tibble(
+      Df = NA_real_, SumOfSqs = NA_real_, R2 = NA_real_,
+      F = NA_real_, p_value = NA_real_, error = conditionMessage(fit)
+    ))
+  }
+  tibble(
+    Df = fit$Df[1],
+    SumOfSqs = fit$SumOfSqs[1],
+    R2 = fit$R2[1],
+    F = fit$F[1],
+    p_value = fit$`Pr(>F)`[1],
+    error = NA_character_
+  )
+}
+
+permanova_results <- bind_rows(lapply(seq_along(filter_ids), function(i) {
+  id <- filter_ids[[i]]
+  ps <- filtered_rar[[id]]
+  if (is.null(ps)) return(tibble())
+  md <- augment_metadata(ps)
+
+  bind_rows(lapply(seq_along(distance_labels), function(j) {
+    distance_id <- names(distance_labels)[[j]]
+    dist_obj <- phyloseq::distance(ps, method = distance_id)
+    bind_rows(lapply(seq_along(variable_labels), function(k) {
+      variable <- names(variable_labels)[[k]]
+      run_adonis_term(
+        dist_obj, md, variable,
+        seed_value = 42L + j * 10L + k
+      ) %>%
+        mutate(
+          filter_id = id,
+          filter = filter_labels[[id]],
+          distance_id = distance_id,
+          distance = distance_labels[[distance_id]],
+          variable_id = variable,
+          variable = variable_labels[[variable]],
+          n_samples = nrow(md),
+          permutation_strata = ifelse(variable_id == "subject_id", "None", "Participant identity")
+        )
+    }))
+  }))
+})) %>%
+  mutate(
+    filter = factor(filter, levels = filter_levels),
+    variable = factor(variable, levels = unname(variable_labels)),
+    distance = factor(distance, levels = unname(distance_labels))
+  ) %>%
+  select(
+    filter_id, filter, distance_id, distance, variable_id, variable,
+    n_samples, permutation_strata, Df, SumOfSqs, R2, F, p_value, error
+  )
+
+write.csv(
+  permanova_results %>% mutate(across(c(filter, distance, variable), as.character)),
+  file.path(tab_dir, "permanova_sensitivity.csv"),
+  row.names = FALSE
+)
+
+write.csv(
+  permanova_results %>%
+    filter(variable_id == "swab_type2") %>%
+    mutate(across(c(filter, distance, variable), as.character)),
+  file.path(tab_dir, "permanova_sampling_system_summary.csv"),
+  row.names = FALSE
+)
+
+p_permanova <- ggplot(
+  permanova_results,
+  aes(filter, R2 * 100, colour = variable, group = variable)
+) +
+  geom_line(linewidth = 0.55) +
+  geom_point(aes(shape = p_value < 0.05), size = 1.8) +
+  facet_wrap(~distance, scales = "free_y", ncol = 1) +
+  scale_shape_manual(values = c(`TRUE` = 19, `FALSE` = 1), name = "p < 0.05") +
+  labs(
+    x = NULL,
+    y = expression(PERMANOVA~R^2~"(%)"),
+    colour = "Variable",
+    title = "PERMANOVA effect sizes across feature filters"
+  ) +
+  theme_ms +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+save_plot(p_permanova, "Figure2_PERMANOVA_sensitivity", 9.2, 8.5)
+permanova_results
+```
+
+# Pairwise beta-diversity partitioning
+
+```{r pairwise-beta}
+distance_to_pairs <- function(dist_obj, md, filter_key, distance_key) {
+  mat <- as.matrix(dist_obj)
+  idx <- which(upper.tri(mat), arr.ind = TRUE)
+  out <- tibble(
+    sample_1 = rownames(mat)[idx[, 1]],
+    sample_2 = colnames(mat)[idx[, 2]],
+    distance_value = mat[idx]
+  ) %>%
+    left_join(
+      md %>%
+        select(sample_name, subject_id, site_group, Type) %>%
+        rename(
+          sample_1 = sample_name,
+          subject_1 = subject_id,
+          site_1 = site_group,
+          type_1 = Type
+        ),
+      by = "sample_1"
+    ) %>%
+    left_join(
+      md %>%
+        select(sample_name, subject_id, site_group, Type) %>%
+        rename(
+          sample_2 = sample_name,
+          subject_2 = subject_id,
+          site_2 = site_group,
+          type_2 = Type
+        ),
+      by = "sample_2"
+    ) %>%
+    mutate(
+      same_participant = subject_1 == subject_2,
+      same_site = site_1 == site_2,
+      same_system = type_1 == type_2,
+      comparison_group = case_when(
+        same_participant & same_site & !same_system ~ "Within participant/site, between systems",
+        same_participant & !same_site ~ "Within participant, between sites",
+        !same_participant & same_site ~ "Between participants, same site",
+        !same_participant & !same_site ~ "Between participants and sites",
+        TRUE ~ "Other within participant/site"
+      ),
+      filter_id = filter_key,
+      filter = filter_labels[[filter_key]],
+      distance_id = distance_key,
+      distance = distance_labels[[distance_key]]
+    )
+  out
+}
+
+pairwise_beta <- bind_rows(lapply(filter_ids, function(id) {
+  ps <- filtered_rar[[id]]
+  if (is.null(ps)) return(tibble())
+  md <- augment_metadata(ps)
+  bind_rows(lapply(names(distance_labels), function(distance_id) {
+    distance_to_pairs(
+      phyloseq::distance(ps, method = distance_id),
+      md,
+      id,
+      distance_id
+    )
+  }))
+})) %>%
+  mutate(
+    filter = factor(filter, levels = filter_levels),
+    distance = factor(distance, levels = unname(distance_labels))
+  )
+
+pairwise_beta_summary <- pairwise_beta %>%
+  group_by(filter_id, filter, distance_id, distance, comparison_group) %>%
+  summarise(
+    n_pairs = n(),
+    mean_distance = mean(distance_value),
+    median_distance = median(distance_value),
+    sd_distance = sd(distance_value),
+    q25 = quantile(distance_value, 0.25),
+    q75 = quantile(distance_value, 0.75),
+    .groups = "drop"
+  )
+
+method_vs_participant <- pairwise_beta %>%
+  filter(
+    (same_participant & same_site & !same_system) |
+      (!same_participant & same_site & same_system)
+  ) %>%
+  mutate(
+    method_contrast = ifelse(
+      same_participant,
+      "Different systems within participant/site",
+      "Same system between participants/site"
+    )
+  ) %>%
+  group_by(filter_id, filter, distance_id, distance, method_contrast) %>%
+  summarise(
+    n_pairs = n(),
+    mean_distance = mean(distance_value),
+    median_distance = median(distance_value),
+    sd_distance = sd(distance_value),
+    .groups = "drop"
+  )
+
+write.csv(pairwise_beta, file.path(tab_dir, "beta_pairwise_distances.csv"), row.names = FALSE)
+write.csv(
+  pairwise_beta_summary,
+  file.path(tab_dir, "beta_distance_partition_summary.csv"),
+  row.names = FALSE
+)
+write.csv(
+  method_vs_participant,
+  file.path(tab_dir, "beta_method_vs_participant_summary.csv"),
+  row.names = FALSE
+)
+
+p_beta_partition <- pairwise_beta %>%
+  filter(comparison_group != "Other within participant/site") %>%
+  ggplot(aes(filter, distance_value, fill = comparison_group)) +
+  geom_boxplot(outlier.shape = NA, linewidth = 0.3) +
+  facet_wrap(~distance, scales = "free_y", ncol = 1) +
+  labs(
+    x = NULL,
+    y = "Pairwise distance",
+    fill = "Pair comparison",
+    title = "Participant-, site-, and sampling-system-related beta diversity"
+  ) +
+  theme_ms +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+save_plot(p_beta_partition, "Figure3_Beta_distance_partition", 11, 9)
+pairwise_beta_summary
+```
+
+# Concordance of beta-diversity results across filters
+
+```{r beta-concordance}
+distance_vectors <- lapply(filter_ids, function(id) {
+  ps <- filtered_rar[[id]]
+  if (is.null(ps)) return(NULL)
+  setNames(
+    lapply(names(distance_labels), function(distance_id) {
+      as.vector(phyloseq::distance(ps, method = distance_id))
+    }),
+    names(distance_labels)
+  )
+})
+names(distance_vectors) <- filter_ids
+
+beta_concordance <- bind_rows(lapply(names(distance_labels), function(distance_id) {
+  base_vec <- distance_vectors[["no_filter"]][[distance_id]]
+  bind_rows(lapply(filter_ids, function(id) {
+    candidate <- distance_vectors[[id]][[distance_id]]
+    if (length(base_vec) != length(candidate)) {
+      return(tibble(
+        filter_id = id,
+        distance_id = distance_id,
+        spearman_rho = NA_real_,
+        mantel_r = NA_real_,
+        mantel_p = NA_real_,
+        note = "Different sample sets after rarefaction"
+      ))
+    }
+    ps <- filtered_rar[[id]]
+    base_ps <- filtered_rar[["no_filter"]]
+    base_dist <- phyloseq::distance(base_ps, method = distance_id)
+    candidate_dist <- phyloseq::distance(ps, method = distance_id)
+    set.seed(42)
+    mt <- vegan::mantel(base_dist, candidate_dist, method = "spearman", permutations = 9999)
+    tibble(
+      filter_id = id,
+      distance_id = distance_id,
+      spearman_rho = suppressWarnings(cor(base_vec, candidate, method = "spearman")),
+      mantel_r = unname(mt$statistic),
+      mantel_p = mt$signif,
+      note = NA_character_
+    )
+  }))
+})) %>%
+  mutate(
+    filter = factor(filter_labels[filter_id], levels = filter_levels),
+    distance = factor(distance_labels[distance_id], levels = unname(distance_labels))
+  )
+
+write.csv(
+  beta_concordance %>% mutate(across(c(filter, distance), as.character)),
+  file.path(tab_dir, "beta_distance_filter_concordance.csv"),
+  row.names = FALSE
+)
+
+p_concordance <- ggplot(
+  beta_concordance,
+  aes(filter, distance, fill = spearman_rho)
+) +
+  geom_tile(colour = "white") +
+  geom_text(aes(label = ifelse(is.na(spearman_rho), "NA", sprintf("%.3f", spearman_rho))), size = 2.7) +
+  scale_fill_gradient2(
+    low = "#2166ac", mid = "white", high = "#b2182b",
+    midpoint = 0.5, limits = c(0, 1), na.value = "grey80"
+  ) +
+  labs(
+    x = NULL,
+    y = NULL,
+    fill = "Spearman rho",
+    title = "Concordance of beta-diversity distances with the unfiltered dataset"
+  ) +
+  theme_ms +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+save_plot(p_concordance, "Figure4_Beta_distance_concordance", 9.2, 4.5)
+beta_concordance
+```
+
+# Community-composition stability
+
+```{r composition-stability}
+sample_composition_similarity <- function(base_ps, filtered_ps, filter_id) {
+  base_otu <- otu_matrix(base_ps)
+  filtered_otu <- otu_matrix(filtered_ps)
+  all_taxa <- rownames(base_otu)
+  aligned <- matrix(
+    0,
+    nrow = length(all_taxa),
+    ncol = ncol(filtered_otu),
+    dimnames = list(all_taxa, colnames(filtered_otu))
+  )
+  aligned[rownames(filtered_otu), ] <- filtered_otu
+  common_samples <- intersect(colnames(base_otu), colnames(aligned))
+  bind_rows(lapply(common_samples, function(sample_id) {
+    x <- base_otu[, sample_id]
+    y <- aligned[, sample_id]
+    x <- x / sum(x)
+    y <- y / sum(y)
+    bc <- as.numeric(vegdist(rbind(x, y), method = "bray"))
+    tibble(
+      filter_id = filter_id,
+      filter = filter_labels[[filter_id]],
+      sample_name = sample_id,
+      bray_curtis_to_unfiltered = bc,
+      composition_similarity = 1 - bc
+    )
+  }))
+}
+
+composition_stability <- bind_rows(lapply(filter_ids, function(id) {
+  sample_composition_similarity(phy, filtered_ps[[id]], id)
+})) %>%
+  left_join(
+    augment_metadata(phy) %>%
+      select(sample_name, subject_id, site_group, swab_type2, Type),
+    by = "sample_name"
+  ) %>%
+  mutate(filter = factor(filter, levels = filter_levels))
+
+composition_stability_summary <- composition_stability %>%
+  group_by(filter_id, filter) %>%
+  summarise(
+    n_samples = n(),
+    mean_similarity = mean(composition_similarity),
+    median_similarity = median(composition_similarity),
+    minimum_similarity = min(composition_similarity),
+    q25_similarity = quantile(composition_similarity, 0.25),
+    .groups = "drop"
+  )
+
+write.csv(
+  composition_stability,
+  file.path(tab_dir, "sample_composition_stability.csv"),
+  row.names = FALSE
+)
+write.csv(
+  composition_stability_summary,
+  file.path(tab_dir, "composition_stability_summary.csv"),
+  row.names = FALSE
+)
+
+p_composition <- ggplot(
+  composition_stability,
+  aes(filter, composition_similarity * 100, fill = filter)
+) +
+  geom_boxplot(outlier.size = 0.6, linewidth = 0.35, show.legend = FALSE) +
+  scale_y_continuous(limits = c(0, 101)) +
+  labs(
+    x = NULL,
+    y = "Similarity to unfiltered composition (%)",
+    title = "Sample-level community-composition stability"
+  ) +
+  theme_ms +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+save_plot(p_composition, "Figure5_Composition_stability", 9.2, 4.8)
+composition_stability_summary
+```
+
+# ASV- and genus-level sharing across sampling systems
+
+```{r shared-features}
+presence_by_system <- function(ps) {
+  otu <- otu_matrix(ps)
+  md <- augment_metadata(ps)
+  result <- sapply(paste0("Type ", 1:5), function(type_name) {
+    ids <- md$sample_name[as.character(md$Type) == type_name]
+    rowSums(otu[, ids, drop = FALSE] > 0) > 0
+  })
+  result <- as.data.frame(result, check.names = FALSE)
+  rownames(result) <- rownames(otu)
+  result
+}
+
+subset_site <- function(ps, site = NULL) {
+  if (is.null(site) || length(site) == 0 || is.na(site)) return(ps)
+  keep <- sample_names(ps)[as.character(sample_data(ps)$site_group) == site]
+  prune_samples(keep, ps) %>% prune_taxa(taxa_sums(.) > 0, .)
+}
+
+summarise_feature_sharing <- function(ps, filter_id, rank_name, site = NULL) {
+  ps_site <- subset_site(ps, site)
+  if (rank_name == "Genus") {
+    ps_site <- tax_glom(ps_site, taxrank = "Genus", NArm = FALSE) %>%
+      prune_taxa(taxa_sums(.) > 0, .)
+  }
+  present <- presence_by_system(ps_site)
+  n_systems <- rowSums(present)
+  otu <- otu_matrix(ps_site)
+  shared_ids <- rownames(present)[n_systems == 5]
+  exclusive_ids <- rownames(present)[n_systems == 1]
+  total_reads <- sum(otu)
+  tibble(
+    filter_id = filter_id,
+    filter = filter_labels[[filter_id]],
+    taxonomic_level = rank_name,
+    subset = ifelse(is.null(site) || length(site) == 0 || is.na(site), "Total", site),
+    retained_features = nrow(present),
+    shared_by_all_five = length(shared_ids),
+    shared_by_all_five_feature_pct = 100 * length(shared_ids) / nrow(present),
+    shared_by_all_five_reads = sum(otu[shared_ids, , drop = FALSE]),
+    shared_by_all_five_read_pct = 100 * sum(otu[shared_ids, , drop = FALSE]) / total_reads,
+    system_exclusive_features = length(exclusive_ids),
+    system_exclusive_reads = sum(otu[exclusive_ids, , drop = FALSE]),
+    system_exclusive_read_pct = 100 * sum(otu[exclusive_ids, , drop = FALSE]) / total_reads
+  )
+}
+
+shared_feature_summary <- bind_rows(lapply(filter_ids, function(id) {
+  ps <- filtered_ps[[id]]
+  bind_rows(lapply(c("ASV", "Genus"), function(rank_name) {
+    bind_rows(lapply(c(NA_character_, "Antecubital", "Forehead"), function(site) {
+      summarise_feature_sharing(ps, id, rank_name, site)
+    }))
+  }))
+})) %>%
+  mutate(
+    filter = factor(filter, levels = filter_levels),
+    taxonomic_level = factor(taxonomic_level, levels = c("ASV", "Genus")),
+    subset = factor(subset, levels = c("Total", "Antecubital", "Forehead"))
+  )
+
+write.csv(
+  shared_feature_summary %>%
+    mutate(across(c(filter, taxonomic_level, subset), as.character)),
+  file.path(tab_dir, "shared_feature_summary.csv"),
+  row.names = FALSE
+)
+
+p_shared <- shared_feature_summary %>%
+  ggplot(
+    aes(filter, shared_by_all_five_read_pct, colour = taxonomic_level, group = taxonomic_level)
+  ) +
+  geom_line(linewidth = 0.65) +
+  geom_point(size = 1.8) +
+  facet_wrap(~subset, ncol = 1) +
+  scale_colour_manual(values = metric_col[c("ASV", "Genus")]) +
+  scale_y_continuous(limits = c(0, 101)) +
+  labs(
+    x = NULL,
+    y = "Reads from features shared by all five systems (%)",
+    colour = "Level",
+    title = "Stability of universally shared bacterial features"
+  ) +
+  theme_ms +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+save_plot(p_shared, "Figure6_Shared_feature_sensitivity", 9.2, 8.3)
+shared_feature_summary
+```
+
+# Sampling-system-exclusive features
+
+```{r exclusive-features}
+exclusive_feature_detail <- function(ps, filter_id, rank_name) {
+  if (rank_name == "Genus") {
+    ps <- tax_glom(ps, taxrank = "Genus", NArm = FALSE) %>%
+      prune_taxa(taxa_sums(.) > 0, .)
+  }
+  present <- presence_by_system(ps)
+  n_systems <- rowSums(present)
+  exclusive_ids <- rownames(present)[n_systems == 1]
+  if (length(exclusive_ids) == 0) return(tibble())
+  otu <- otu_matrix(ps)
+  md <- augment_metadata(ps)
+  total_reads <- sum(otu)
+
+  bind_rows(lapply(exclusive_ids, function(feature_id) {
+    exclusive_type <- colnames(present)[which(as.logical(present[feature_id, , drop = TRUE]))]
+    sample_ids <- md$sample_name[as.character(md$Type) == exclusive_type]
+    subject_ids <- unique(md$subject_id[
+      md$sample_name %in% sample_ids[otu[feature_id, sample_ids, drop = TRUE] > 0]
+    ])
+    tibble(
+      filter_id = filter_id,
+      filter = filter_labels[[filter_id]],
+      taxonomic_level = rank_name,
+      feature_id = feature_id,
+      exclusive_type = exclusive_type,
+      feature_reads = sum(otu[feature_id, ]),
+      feature_read_pct = 100 * sum(otu[feature_id, ]) / total_reads,
+      participant_prevalence = length(subject_ids)
+    )
+  }))
+}
+
+exclusive_detail <- bind_rows(lapply(filter_ids, function(id) {
+  bind_rows(
+    exclusive_feature_detail(filtered_ps[[id]], id, "ASV"),
+    exclusive_feature_detail(filtered_ps[[id]], id, "Genus")
+  )
+}))
+
+exclusive_summary <- exclusive_detail %>%
+  group_by(filter_id, filter, taxonomic_level, exclusive_type) %>%
+  summarise(
+    exclusive_features = n(),
+    exclusive_read_pct = sum(feature_read_pct),
+    median_participant_prevalence = median(participant_prevalence),
+    maximum_participant_prevalence = max(participant_prevalence),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    filter = factor(filter, levels = filter_levels),
+    exclusive_type = factor(exclusive_type, levels = paste0("Type ", 1:5))
+  )
+
+write.csv(exclusive_detail, file.path(tab_dir, "system_exclusive_feature_detail.csv"), row.names = FALSE)
+write.csv(exclusive_summary, file.path(tab_dir, "system_exclusive_feature_summary.csv"), row.names = FALSE)
+
+p_exclusive <- ggplot(
+  exclusive_summary,
+  aes(filter, exclusive_read_pct, fill = exclusive_type)
+) +
+  geom_col() +
+  facet_wrap(~taxonomic_level, scales = "free_y", ncol = 1) +
+  scale_fill_manual(values = type_col, drop = FALSE) +
+  labs(
+    x = NULL,
+    y = "Reads assigned to system-exclusive features (%)",
+    fill = "Sampling system",
+    title = "Sampling-system-exclusive bacterial features"
+  ) +
+  theme_ms +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+save_plot(p_exclusive, "Figure7_System_exclusive_features", 9.2, 7.2)
+exclusive_summary
+```
+
+# Existing decontam threshold analysis
+
+The threshold comparison below is imported from the completed prevalence-based
+decontam sensitivity analysis. It is not recalculated here.
+
+```{r decontam-summary}
+decontam_path <- file.path(getwd(), "Tables", "Decontam_permanova_summary.txt")
+
+if (file.exists(decontam_path)) {
+  decontam_summary <- read.delim(
+    decontam_path,
+    row.names = 1,
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  ) %>% as_tibble()
+
+  write.csv(
+    decontam_summary,
+    file.path(tab_dir, "decontam_threshold_summary_existing_results.csv"),
+    row.names = FALSE
+  )
+
+  p_decontam_reads <- decontam_summary %>%
+    select(threshold, reads_retained_skin, reads_retained_ctrl) %>%
+    pivot_longer(-threshold, names_to = "sample_class", values_to = "reads_retained_pct") %>%
+    mutate(
+      sample_class = recode(
+        sample_class,
+        reads_retained_skin = "True samples",
+        reads_retained_ctrl = "Controls"
+      )
+    ) %>%
+    ggplot(aes(threshold, reads_retained_pct, colour = sample_class)) +
+    geom_line(linewidth = 0.7) +
+    geom_point(size = 1.8) +
+    scale_x_continuous(breaks = seq(0.1, 0.9, 0.1)) +
+    labs(
+      x = "decontam prevalence threshold",
+      y = "Reads retained (%)",
+      colour = "Sample class",
+      title = "Read retention across decontam thresholds"
+    ) +
+    theme_ms
+
+  p_decontam_asv <- ggplot(
+    decontam_summary,
+    aes(threshold, n_contam_ASV)
+  ) +
+    geom_line(colour = "#6a3d9a", linewidth = 0.7) +
+    geom_point(colour = "#6a3d9a", size = 1.8) +
+    scale_x_continuous(breaks = seq(0.1, 0.9, 0.1)) +
+    labs(
+      x = "decontam prevalence threshold",
+      y = "ASVs classified as contaminants",
+      title = "Contaminant calls across thresholds"
+    ) +
+    theme_ms
+
+  p_decontam <- p_decontam_reads | p_decontam_asv
+  save_plot(p_decontam, "Figure8_Decontam_threshold_sensitivity", 10, 4.4)
+  decontam_summary
+} else {
+  warning("Existing decontam summary was not found: ", decontam_path)
+}
+```
+
+# Integrated decision table
+
+```{r decision-table}
+system_permanova <- permanova_results %>%
+  filter(variable_id == "swab_type2") %>%
+  select(
+    filter_id, distance_id,
+    sampling_system_R2 = R2,
+    sampling_system_p = p_value
+  ) %>%
+  pivot_wider(
+    names_from = distance_id,
+    values_from = c(sampling_system_R2, sampling_system_p),
+    names_glue = "{.value}_{distance_id}"
+  )
+
+shared_total <- shared_feature_summary %>%
+  filter(subset == "Total") %>%
+  select(
+    filter_id, taxonomic_level,
+    shared_by_all_five, shared_by_all_five_read_pct,
+    system_exclusive_features, system_exclusive_read_pct
+  ) %>%
+  pivot_wider(
+    names_from = taxonomic_level,
+    values_from = c(
+      shared_by_all_five,
+      shared_by_all_five_read_pct,
+      system_exclusive_features,
+      system_exclusive_read_pct
+    ),
+    names_glue = "{.value}_{taxonomic_level}"
+  )
+
+decision_summary <- retention_summary %>%
+  mutate(filter = as.character(filter)) %>%
+  left_join(
+    composition_stability_summary %>%
+      select(filter_id, median_composition_similarity = median_similarity),
+    by = "filter_id"
+  ) %>%
+  left_join(system_permanova, by = "filter_id") %>%
+  left_join(shared_total, by = "filter_id") %>%
+  mutate(
+    prevalence_filter_equivalent_to_ge5 = filter_id %in% c(
+      "prevalence_ge_5", "prevalence_ge_10pct"
+    ),
+    interpretation = case_when(
+      filter_id == "no_filter" ~ "Post-decontam reference condition",
+      filter_id == "remove_count_le_1" ~ "Minimum rare-feature filter (singleton removal)",
+      filter_id == "remove_count_le_2" ~ "Conservative count filter (counts <=2 removed)",
+      filter_id == "remove_count_le_10" ~ "Stronger count filter; use as sensitivity analysis",
+      filter_id == "prevalence_ge_2" ~ "Minimum prevalence filter",
+      filter_id == "prevalence_ge_5" ~ "Prevalence in at least five of 50 true samples",
+      filter_id == "prevalence_ge_10pct" ~ "Equivalent to prevalence >=5 for n=50",
+      filter_id == "mean_abundance_ge_0.1pct" ~ "Dominant-community abundance filter",
+      filter_id == "mean_abundance_ge_1pct" ~ "Aggressive dominant-community-only filter",
+      TRUE ~ NA_character_
+    )
+  )
+
+write.csv(
+  decision_summary,
+  file.path(tab_dir, "filtering_decision_summary.csv"),
+  row.names = FALSE
+)
+
+writeLines(
+  c(
+    "Filtering sensitivity analysis outputs",
+    paste0("Generated: ", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")),
+    paste0("Starting object: Phyloseq/phy_F270R240_260812_v4.rds"),
+    paste0("True samples: ", nsamples(phy)),
+    paste0("Post-decontam ASVs before additional filtering: ", ntaxa(phy)),
+    paste0("Post-decontam reads before additional filtering: ", sum(sample_sums(phy))),
+    paste0("Fixed rarefaction depth: ", target_depth),
+    "",
+    "Important equivalence:",
+    paste0(
+      "With ", nsamples(phy), " true samples, prevalence >=10% requires detection in ",
+      ceiling(0.10 * nsamples(phy)),
+      " samples and is therefore identical to prevalence >=5 samples."
+    ),
+    "",
+    "See filtering_decision_summary.csv for the integrated comparison."
+  ),
+  file.path(out_dir, "README_results.txt")
+)
+
+decision_summary
+```
+
+# Session information
+
+```{r session-info}
+writeLines(capture.output(sessionInfo()), file.path(out_dir, "sessionInfo.txt"))
+sessionInfo()
+```

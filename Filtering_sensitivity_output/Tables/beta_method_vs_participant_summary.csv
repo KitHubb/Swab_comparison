@@ -1,0 +1,55 @@
+"filter_id","filter","distance_id","distance","method_contrast","n_pairs","mean_distance","median_distance","sd_distance"
+"mean_abundance_ge_0.1pct","Mean abundance >=0.1%","bray","Bray-Curtis","Different systems within participant/site",92,0.316149702548317,0.32215793056501,0.218602842648098
+"mean_abundance_ge_0.1pct","Mean abundance >=0.1%","bray","Bray-Curtis","Same system between participants/site",92,0.704877245686211,0.785823689584752,0.279356975489574
+"mean_abundance_ge_0.1pct","Mean abundance >=0.1%","unifrac","Unweighted UniFrac","Different systems within participant/site",92,0.197399775701096,0.167497921515005,0.116684340027548
+"mean_abundance_ge_0.1pct","Mean abundance >=0.1%","unifrac","Unweighted UniFrac","Same system between participants/site",92,0.437553021355417,0.474004146778179,0.140100475783701
+"mean_abundance_ge_0.1pct","Mean abundance >=0.1%","wunifrac","Weighted UniFrac","Different systems within participant/site",92,0.214958693413408,0.193606810297602,0.160291108119002
+"mean_abundance_ge_0.1pct","Mean abundance >=0.1%","wunifrac","Weighted UniFrac","Same system between participants/site",92,0.618802531361513,0.635318777563488,0.266268729638514
+"mean_abundance_ge_1pct","Mean abundance >=1%","bray","Bray-Curtis","Different systems within participant/site",62,0.203825292606337,0.119554118447924,0.217337880431136
+"mean_abundance_ge_1pct","Mean abundance >=1%","bray","Bray-Curtis","Same system between participants/site",56,0.570349727705922,0.608236895847515,0.364676900245222
+"mean_abundance_ge_1pct","Mean abundance >=1%","unifrac","Unweighted UniFrac","Different systems within participant/site",62,0.100201228886153,0.0837551048699967,0.111538360957585
+"mean_abundance_ge_1pct","Mean abundance >=1%","unifrac","Unweighted UniFrac","Same system between participants/site",56,0.234053288432659,0.183338181359283,0.182919697730494
+"mean_abundance_ge_1pct","Mean abundance >=1%","wunifrac","Weighted UniFrac","Different systems within participant/site",62,0.113306387645554,0.0644456633842679,0.117356452175304
+"mean_abundance_ge_1pct","Mean abundance >=1%","wunifrac","Weighted UniFrac","Same system between participants/site",56,0.542767521028118,0.54169829259158,0.359395436273576
+"no_filter","No additional filter","bray","Bray-Curtis","Different systems within participant/site",100,0.381369979577944,0.417545949625596,0.229023968843123
+"no_filter","No additional filter","bray","Bray-Curtis","Same system between participants/site",100,0.747978216473792,0.834751531654186,0.255351731977497
+"no_filter","No additional filter","unifrac","Unweighted UniFrac","Different systems within participant/site",100,0.695370522431909,0.732566967415347,0.154995548520853
+"no_filter","No additional filter","unifrac","Unweighted UniFrac","Same system between participants/site",100,0.812715813235876,0.838594076064739,0.106036616737187
+"no_filter","No additional filter","wunifrac","Weighted UniFrac","Different systems within participant/site",100,0.0712839335476704,0.0469584760064461,0.072376703048066
+"no_filter","No additional filter","wunifrac","Weighted UniFrac","Same system between participants/site",100,0.159053708299178,0.140195347764929,0.100164750185334
+"prevalence_ge_10pct","Prevalence >=10% samples","bray","Bray-Curtis","Different systems within participant/site",92,0.319706913901797,0.335772634445201,0.211669878324511
+"prevalence_ge_10pct","Prevalence >=10% samples","bray","Bray-Curtis","Same system between participants/site",92,0.713667608843638,0.805820285908782,0.274417358862527
+"prevalence_ge_10pct","Prevalence >=10% samples","unifrac","Unweighted UniFrac","Different systems within participant/site",92,0.391611825423891,0.38244162320307,0.136942892212165
+"prevalence_ge_10pct","Prevalence >=10% samples","unifrac","Unweighted UniFrac","Same system between participants/site",92,0.634868874247772,0.651356381311348,0.15600670406361
+"prevalence_ge_10pct","Prevalence >=10% samples","wunifrac","Weighted UniFrac","Different systems within participant/site",92,0.163859513279735,0.147797669741059,0.11341688004566
+"prevalence_ge_10pct","Prevalence >=10% samples","wunifrac","Weighted UniFrac","Same system between participants/site",92,0.381472245182809,0.411582333915711,0.178688065654106
+"prevalence_ge_2","Prevalence >=2 samples","bray","Bray-Curtis","Different systems within participant/site",92,0.350351096575606,0.356364874063989,0.226956644738089
+"prevalence_ge_2","Prevalence >=2 samples","bray","Bray-Curtis","Same system between participants/site",92,0.733595761683488,0.826327433628319,0.266398046042889
+"prevalence_ge_2","Prevalence >=2 samples","unifrac","Unweighted UniFrac","Different systems within participant/site",92,0.502746776831896,0.49375906253088,0.144139137170616
+"prevalence_ge_2","Prevalence >=2 samples","unifrac","Unweighted UniFrac","Same system between participants/site",92,0.697470959209237,0.702889419873707,0.131592009027949
+"prevalence_ge_2","Prevalence >=2 samples","wunifrac","Weighted UniFrac","Different systems within participant/site",92,0.150585779651454,0.126894120643664,0.107506158513904
+"prevalence_ge_2","Prevalence >=2 samples","wunifrac","Weighted UniFrac","Same system between participants/site",92,0.32341807945691,0.359878627614486,0.146392275737139
+"prevalence_ge_5","Prevalence >=5 samples","bray","Bray-Curtis","Different systems within participant/site",92,0.319706913901797,0.335772634445201,0.211669878324511
+"prevalence_ge_5","Prevalence >=5 samples","bray","Bray-Curtis","Same system between participants/site",92,0.713667608843638,0.805820285908782,0.274417358862527
+"prevalence_ge_5","Prevalence >=5 samples","unifrac","Unweighted UniFrac","Different systems within participant/site",92,0.391611825423891,0.38244162320307,0.136942892212165
+"prevalence_ge_5","Prevalence >=5 samples","unifrac","Unweighted UniFrac","Same system between participants/site",92,0.634868874247772,0.651356381311348,0.15600670406361
+"prevalence_ge_5","Prevalence >=5 samples","wunifrac","Weighted UniFrac","Different systems within participant/site",92,0.163859513279735,0.147797669741059,0.11341688004566
+"prevalence_ge_5","Prevalence >=5 samples","wunifrac","Weighted UniFrac","Same system between participants/site",92,0.381472245182809,0.411582333915711,0.178688065654106
+"remove_count_le_1","Remove count <=1","bray","Bray-Curtis","Different systems within participant/site",100,0.381465282505106,0.419588155207624,0.229189632752151
+"remove_count_le_1","Remove count <=1","bray","Bray-Curtis","Same system between participants/site",100,0.74783185840708,0.834155888359428,0.255418918665259
+"remove_count_le_1","Remove count <=1","unifrac","Unweighted UniFrac","Different systems within participant/site",100,0.694906346558359,0.732315748730099,0.158564588130956
+"remove_count_le_1","Remove count <=1","unifrac","Unweighted UniFrac","Same system between participants/site",100,0.812501256338541,0.835137478941548,0.104977466612104
+"remove_count_le_1","Remove count <=1","wunifrac","Weighted UniFrac","Different systems within participant/site",100,0.0708786723201604,0.0465849738381848,0.0715999581111875
+"remove_count_le_1","Remove count <=1","wunifrac","Weighted UniFrac","Same system between participants/site",100,0.157881491264527,0.140330756985266,0.0989965739044699
+"remove_count_le_10","Remove count <=10","bray","Bray-Curtis","Different systems within participant/site",100,0.379387338325391,0.413291354663036,0.229169270548852
+"remove_count_le_10","Remove count <=10","bray","Bray-Curtis","Same system between participants/site",100,0.747055820285909,0.832028590878148,0.255396685807396
+"remove_count_le_10","Remove count <=10","unifrac","Unweighted UniFrac","Different systems within participant/site",100,0.650770170906934,0.673446106953848,0.162443212706761
+"remove_count_le_10","Remove count <=10","unifrac","Unweighted UniFrac","Same system between participants/site",100,0.794866777580314,0.826976878904737,0.115630092271357
+"remove_count_le_10","Remove count <=10","wunifrac","Weighted UniFrac","Different systems within participant/site",100,0.0754965419656886,0.0557809464913301,0.0720381751981326
+"remove_count_le_10","Remove count <=10","wunifrac","Weighted UniFrac","Same system between participants/site",100,0.169173721271076,0.154189329753334,0.0996516131866535
+"remove_count_le_2","Remove count <=2","bray","Bray-Curtis","Different systems within participant/site",100,0.38177842069435,0.418056501021103,0.229579510994087
+"remove_count_le_2","Remove count <=2","bray","Bray-Curtis","Same system between participants/site",100,0.7482045609258,0.834581347855684,0.255619642294907
+"remove_count_le_2","Remove count <=2","unifrac","Unweighted UniFrac","Different systems within participant/site",100,0.686325133013487,0.731557102366822,0.156267627511574
+"remove_count_le_2","Remove count <=2","unifrac","Unweighted UniFrac","Same system between participants/site",100,0.80801922200018,0.838912870348806,0.111801096885328
+"remove_count_le_2","Remove count <=2","wunifrac","Weighted UniFrac","Different systems within participant/site",100,0.0709299399024721,0.0487344016204114,0.0715926661854357
+"remove_count_le_2","Remove count <=2","wunifrac","Weighted UniFrac","Same system between participants/site",100,0.158370656361519,0.140764254817352,0.0995089018787056
