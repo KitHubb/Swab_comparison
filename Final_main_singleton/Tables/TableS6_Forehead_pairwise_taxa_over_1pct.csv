@@ -1,0 +1,24 @@
+"Rank","Taxa","Type1 vs Type2","Type1 vs Type3","Type1 vs Type4","Type1 vs Type5","Type2 vs Type3","Type2 vs Type4","Type2 vs Type5","Type3 vs Type4","Type3 vs Type5","Type4 vs Type5"
+"Phylum","Actinobacteriota",0.561,0.875,0.561,0.697,1,0.528,0.561,0.737,0.528,0.737
+"Phylum","Proteobacteria",0.95,0.95,0.334,0.95,1,0.334,0.95,0.334,0.95,0.95
+"Phylum","Firmicutes",1,1,1,1,1,1,1,1,0.591,1
+"Genus","Cutibacterium",0.444,0.444,1,0.465,0.465,0.465,0.465,0.444,0.444,0.465
+"Genus","Neisseriaceae_f",0.259,0.47,0.259,0.259,0.47,0.259,0.259,0.259,0.259,1
+"Genus","Staphylococcus",0.598,0.598,0.737,0.598,0.598,1,0.598,1,0.591,0.598
+"Genus","Gordonia",1,1,1,1,1,1,1,1,1,1
+"Genus","Corynebacterium",0.936,0.936,1,1,0.591,0.983,1,0.983,1,0.983
+"Genus","Williamsia",1,1,1,1,1,1,1,1,1,1
+"Genus","Streptococcus",0.855,0.855,0.855,0.855,0.855,0.855,0.855,0.855,0.855,0.855
+"Genus","Rothia",1,1,1,1,1,1,1,1,1,1
+"Genus","Dietzia",1,1,1,1,1,1,1,1,1,1
+"Genus","Corynebacteriaceae_f",0.592,1,1,1,1,0.295,1,0.295,1,1
+"Species","Cutibacterium_g",0.444,0.444,1,0.465,0.465,0.465,0.465,0.444,0.444,0.465
+"Species","Neisseriaceae_f",0.259,0.47,0.259,0.259,0.47,0.259,0.259,0.259,0.259,1
+"Species","Staphylococcus_g",0.598,0.598,0.737,0.598,0.598,1,0.598,1,0.591,0.598
+"Species","Gordonia_g",1,1,1,1,1,1,1,1,1,1
+"Species","Corynebacterium_g",0.936,0.936,1,1,0.591,0.983,1,0.983,1,0.983
+"Species","Williamsia_g",1,1,1,1,1,1,1,1,1,1
+"Species","Streptococcus_g",0.855,0.855,0.855,0.855,0.855,0.855,0.855,0.855,0.855,0.855
+"Species","Rothia_g",1,1,1,1,1,1,1,1,1,1
+"Species","Dietzia_g",1,1,1,1,1,1,1,1,1,1
+"Species","Corynebacteriaceae_f",0.592,1,1,1,1,0.295,1,0.295,1,1

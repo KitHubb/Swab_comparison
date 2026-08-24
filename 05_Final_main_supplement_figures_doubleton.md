@@ -1975,7 +1975,7 @@ save_figure(FigureS1, "FigureS1_participant_composition", 10.7, 10.8)
 ``` r
 # Tables S3-S6 use the same taxa as Figure S1: global mean relative abundance >1%.
 # "Others" is included in composition tables only, not in pairwise testing.
-table_dir <- Sys.getenv("DT_TABLE_DIR", unset = file.path(getwd(), "Tables"))
+table_dir <- file.path(out_dir, "Tables")
 dir.create(table_dir, recursive = TRUE, showWarnings = FALSE)
 
 composition_cutoff <- 0.01
@@ -2288,7 +2288,9 @@ print(list.files(out_dir, full.names = TRUE))
 ## [17] "D:/KSY/Project/2.DT_Swab[논문작업pf남경화]/Rproj_DT_Swab/Final_main_doubleton/FigureS2_UniFrac_heatmaps.png"               
 ## [18] "D:/KSY/Project/2.DT_Swab[논문작업pf남경화]/Rproj_DT_Swab/Final_main_doubleton/FigureS2_UniFrac_heatmaps.tiff"              
 ## [19] "D:/KSY/Project/2.DT_Swab[논문작업pf남경화]/Rproj_DT_Swab/Final_main_doubleton/FigureS3_participant_alpha_beta.png"         
-## [20] "D:/KSY/Project/2.DT_Swab[논문작업pf남경화]/Rproj_DT_Swab/Final_main_doubleton/FigureS3_participant_alpha_beta.tiff"
+## [20] "D:/KSY/Project/2.DT_Swab[논문작업pf남경화]/Rproj_DT_Swab/Final_main_doubleton/FigureS3_participant_alpha_beta.tiff"        
+## [21] "D:/KSY/Project/2.DT_Swab[논문작업pf남경화]/Rproj_DT_Swab/Final_main_doubleton/PERMANOVA_univariable_weighted_UniFrac.csv"  
+## [22] "D:/KSY/Project/2.DT_Swab[논문작업pf남경화]/Rproj_DT_Swab/Final_main_doubleton/Tables"
 ```
 
 # Final figure preview

@@ -431,3 +431,166 @@ M  figure/figure-2-1.png
 - [ ] `Nextflow/` 폴더 별도 이전 또는 Git 저장소 생성
 - [ ] 서버 raw data/output 경로 접근 확인
 - [ ] 로컬 미커밋 singleton/doubleton/tenton 결과 처리
+
+## 15. 목표 저널 및 투고 전략 업데이트(2026-08-25)
+
+### 15.1 목표 저널
+
+목표 저널은 **Frontiers in Microbiomes**로 정한다. 현재 자료는 Frontiers in Microbiology에 바로 투고하기에는 표본 수와 대조군 구성, sampling-position 무작위화 여부에서 위험이 크다. Frontiers in Microbiomes에는 피부 저생체량 시료의 채취법 비교와 오염·희귀 feature 처리에 따른 결론의 안정성을 다루는 방법론 연구로 제출하는 방향이 더 적합하다.
+
+논문의 중심 질문은 단순히 “5개 sampling system 사이에 유의한 차이가 없었다”가 아니다. 다음과 같이 설정한다.
+
+> **피부 저생체량 16S 자료에서 참여자와 해부학적 부위의 신호가 다섯 가지 swab–medium sampling system 및 합리적인 오염·희귀 feature 처리 조건을 바꾸어도 유지되는가?**
+
+권장 영문 framing은 다음과 같다.
+
+> Participant- and site-associated community structure remained stable across five integrated swab–medium sampling systems and across reasonable contamination and rare-feature filtering decisions.
+
+이 문장은 sampling system의 동등성이나 완전한 상호교환 가능성을 주장하지 않는다. 표본 수가 5명이므로 “no significant difference”를 “equivalent”로 표현해서는 안 된다.
+
+### 15.2 잠정 제목
+
+우선 권장 제목:
+
+> **Robustness of skin bacterial community profiles across five swab–medium sampling systems and bioinformatic filtering strategies**
+
+대안 제목:
+
+> **Within-subject benchmarking of five swab–medium systems for low-biomass skin microbiome profiling across two anatomical sites**
+
+첫 번째 제목은 decontam 및 filtering sensitivity를 논문의 차별점으로 전면에 배치할 때 사용한다. 두 번째 제목은 실험적 sampling-system 비교를 더 강조할 때 사용한다.
+
+### 15.3 유사 연구와 비교한 차별점
+
+본 연구에서 논문 가치가 있는 부분은 다음과 같다.
+
+1. 동일 참여자에서 5개 integrated swab–medium system을 직접 비교하였다.
+2. 미생물 생태가 다른 forehead와 antecubital fossa를 함께 분석하였다.
+3. participant, anatomical site 및 sampling system이 설명하는 beta-diversity 변이를 구분하였다.
+4. 저생체량 피부 자료에 prevalence 기반 decontam을 적용하고 threshold 0.1–0.9를 검토하였다.
+5. singleton, doubleton, count ≤10, prevalence 및 mean-abundance filtering에 따른 데이터 보존과 결과 안정성을 비교하였다.
+6. 다섯 sampling system에서 공통 검출된 Genus가 전체 read에서 차지하는 비율을 산출하였다.
+
+유사 swab-method 논문도 소규모 반복측정 설계를 사용한 사례가 있으므로 참여자 5명이라는 이유만으로 연구 가치가 사라지지는 않는다. 다만 본 연구가 기존 문헌보다 강하게 주장할 수 있는 부분은 “어떤 swab이 더 우수하다”가 아니라 **저생체량 시료의 분석 결정이 sampling-system 결론에 얼마나 영향을 주는지 함께 정량화했다는 점**이다.
+
+### 15.4 비판적 한계 및 해석 경계
+
+다음 한계는 제출 전에 원자료 또는 연구기록을 확인하고 원고에 명시해야 한다.
+
+1. **Sampling 위치의 무작위화 또는 순환 배정 여부**
+   각 anatomical site에서 Type 1–5의 접촉 위치와 채취 순서가 무작위 또는 참여자별로 순환 배정되었는지 확인해야 한다. 고정된 위치·순서를 사용했다면 sampling system 효과와 피부의 국소 공간 변이가 혼재될 수 있다. 이 문제는 사후 통계로 완전히 보정할 수 없다.
+
+2. **저생체량 연구의 대조군 구성**
+   현재 air control을 이용한 decontam 결과가 존재한다. Extraction blank, PCR no-template control, unused-swab control, positive/mock-community control의 수행 여부를 확인해야 한다. 수행하지 않았다면 이를 숨기지 말고 제한점으로 기록한다.
+
+3. **작은 참여자 수**
+   참여자는 5명이며 한 참여자 안의 반복 시료가 생물학적으로 독립된 참여자 수를 늘려주지 않는다. 검정력 부족으로 sampling-system 차이를 놓칠 수 있으므로 equivalence 또는 non-inferiority를 주장하지 않는다.
+
+4. **Sampling system, swab material 및 collection medium의 구조적 교락**
+   본 설계는 완전 요인설계가 아니다. Swab-tip material과 collection medium의 PERMANOVA는 탐색적 결과로 제시하고 독립적인 인과 효과로 해석하지 않는다.
+
+5. **절대 세균량 자료 부재**
+   DNA concentration은 human DNA를 포함한 total DNA이며 bacterial biomass 지표가 아니다. qPCR 또는 spike-in 기반 절대량이 없으므로 relative abundance와 read count 중심의 비교라는 한계를 명시한다.
+
+6. **Aggregate UpSet의 해석 한계**
+   전체 자료를 sampling system별로 합친 UpSet은 한 system에서 검출된 feature가 다른 참여자 또는 다른 부위에서 나타나도 공통으로 계산될 수 있다. 따라서 participant×site matched block 내 일치도를 별도로 산출해야 한다.
+
+7. **Species-level 해상도**
+   V1–V3 및 SILVA 기반 species assignment는 putative annotation이다. 주 결과는 Genus level로 해석하고 species 결과는 제한적으로 제시한다.
+
+### 15.5 제출 전 필수 추가 분석
+
+#### A. Canonical singleton 분석 확정
+
+- `05_Final_main_supplement_figures.Rmd`에 singleton 제거를 통합한다.
+- 분석 시작 시 `taxa_sums(phy) > 1`을 적용하되, post-decontam true-sample 객체에서 적용되는지 확인한다.
+- 전체 read는 847,149가 아니라 **847,074 reads**, Genus는 347이 아니라 **344 genera**로 동기화한다.
+- Figure 1–3, Figure S1–S3, PERMANOVA, UpSet summary 및 Supplementary Table을 같은 객체에서 재생성한다.
+
+#### B. 반복측정에 맞는 alpha diversity 및 read-count 분석
+
+- 기존 site별 pairwise Wilcoxon rank-sum test는 독립표본 검정이므로 반복측정 구조에 가장 적합하지 않다.
+- 우선 선택은 participant를 random intercept로 둔 mixed-effects model이다.
+- 표본 수가 작아 모델이 불안정하면 site별 Friedman test를 전체 검정으로 사용하고, 사후 비교에는 paired Wilcoxon signed-rank test와 multiplicity correction을 적용한다.
+- DNA concentration은 bacterial biomass 결과로 해석하지 않는다. Post-filter read count는 필요 시 동일 반복측정 구조로 분석한다.
+
+#### C. Beta-diversity 가정과 안정성 검증
+
+- Weighted UniFrac, Unweighted UniFrac 및 Bray–Curtis에 대해 sampling system별 PERMDISP를 수행한다.
+- PERMANOVA의 비유의 결과가 dispersion 차이와 혼재되지 않았는지 확인한다.
+- Leave-one-participant-out 분석을 수행하여 각 참여자를 한 명씩 제외했을 때 participant, site 및 system의 R²와 p-value 방향이 유지되는지 평가한다.
+- 본문에는 단일 p-value보다 R²의 범위와 방향의 안정성을 우선 보고한다.
+
+#### D. Participant×site matched-block 일치도
+
+- 5 participants × 2 sites의 총 10개 matched block을 정의한다.
+- 각 block에서 다섯 sampling system 사이의 Weighted UniFrac, Unweighted UniFrac 및 Bray–Curtis 평균 또는 중앙거리(10개 pair)를 산출한다.
+- 비교 기준으로 같은 site의 participant 간 거리와 같은 participant의 site 간 거리를 산출한다.
+- 가능한 요약 지표:
+  - within-block five-system median distance
+  - between-participant, same-site median distance
+  - within-participant, between-site distance
+  - within-block/shared Genus read fraction
+  - block별 검출 Genus Jaccard similarity
+- 목표는 sampling-system 내 거리보다 participant 또는 site가 달라질 때 거리가 더 커지는지를 직관적으로 제시하는 것이다.
+
+#### E. Decontam threshold × rare-feature filtering 결론 안정성
+
+- Decontam threshold 0.1–0.9 각각에서 downstream 분석 객체를 재구성한다.
+- 각 threshold에서 최소한 no additional filter, singleton removal 및 count ≤10 removal을 비교한다.
+- 추가 sensitivity 조건으로 prevalence ≥2, prevalence ≥5/10%, mean relative abundance ≥0.1% 및 ≥1%를 유지할 수 있으나, sample loss를 반드시 함께 보고한다.
+- 조합별로 다음 값을 한 표에 집계한다.
+  - retained ASVs, reads 및 samples
+  - rarefaction depth 5,876 미만 sample 수
+  - participant, site 및 system의 PERMANOVA R²와 p-value
+  - PERMDISP p-value
+  - five-system shared ASV/Genus 수와 read fraction
+  - system-exclusive read fraction
+  - baseline 대비 sample-level composition similarity
+- 분석의 목표는 유의한 조건만 선택하는 것이 아니다. 합리적인 처리 범위에서 **participant/site 신호가 system 신호보다 크다는 결론이 유지되는지** 확인하는 것이다.
+
+#### F. Figure 및 Table 권장 구성
+
+- Main Figure 1: sampling system별 alpha/beta diversity. 반복측정 통계와 PERMANOVA strata를 legend에 명시한다.
+- Main Figure 2: site별 Genus composition. Mean relative abundance ≥1%인 taxa만 legend에 표시하고 나머지는 `Other`로 합친다.
+- Main Figure 3: Genus-level UpSet 또는 matched-block 일치도 Figure. Aggregate UpSet만으로 swab 간 일치성을 주장하지 않는다.
+- 신규 Main 또는 Supplementary Figure: decontam/filtering 조건에 따른 retained reads, system R², site R² 및 participant R²의 안정성 plot.
+- 신규 Supplementary Figure: leave-one-participant-out PERMANOVA와 PERMDISP 결과.
+- 신규 Supplementary Table: 모든 decontam/filtering 조합의 데이터 보존 및 효과크기.
+
+### 15.6 원고에서 즉시 교정할 사항
+
+1. Methods의 “DADA2 without fixed-length truncation (270/240)” 모순을 제거하고 실제 적용한 truncation length를 정확히 기술한다.
+2. Singleton 채택 후 total reads, ASV 수, Genus 수, shared-feature 비율을 전부 같은 분석 객체에서 다시 가져온다.
+3. 원고의 Figure S4–S7 표기를 실제 최종 출력인 Figure S1–S3과 맞춘다.
+4. Figure 1 legend에 Shannon index뿐 아니라 Observed ASVs가 포함됨을 명시한다.
+5. Supplementary Table 번호 중복 또는 S2/S3 충돌을 정리한다.
+6. Cutadapt version, QIIME 2 version, SILVA release, classifier training 범위 및 confidence 0.7을 실행 기록과 대조한다.
+7. Decontam threshold 0.5가 control read 제거와 true-sample 보존의 균형으로 선택되었음을 기술하되, 사후 선택에 따른 편향 가능성을 sensitivity analysis로 보완한다.
+8. “sampling systems were equivalent/interchangeable” 대신 “no statistically significant system-associated difference was detected” 또는 “the observed system effect was small relative to participant and site effects”를 사용한다.
+
+### 15.7 투고 판단 기준
+
+다음 조건이 충족되면 Frontiers in Microbiomes 투고본으로 정리한다.
+
+- singleton 기반 canonical 결과와 원고 수치가 완전히 일치한다.
+- sampling 위치와 채취 순서의 무작위화 여부가 확인되어 Methods 또는 Limitations에 반영된다.
+- 사용한 negative/positive control 종류가 명확히 기록된다.
+- 반복측정 통계, PERMDISP 및 leave-one-participant-out 결과가 추가된다.
+- matched participant×site block 분석으로 sampling-system 일치도를 직접 제시한다.
+- decontam/filtering 변화에도 핵심 효과크기 순서가 유지됨을 보여준다.
+- 표본 수가 작다는 점과 equivalence를 증명하지 못한다는 점을 Discussion에 명시한다.
+
+위 조건을 충족하면 본 연구는 단순한 장비·swab 비교를 넘어, **저생체량 피부 microbiome에서 채취 시스템과 bioinformatic filtering이 결과 해석에 미치는 영향을 함께 평가한 재현성 연구**로 제출할 수 있다.
+
+## 16. 업데이트된 실행 순서
+
+1. Sampling 위치·순서 및 실험 대조군 기록 확인
+2. Canonical script에 singleton 제거 통합
+3. Figure/Table 전체 재생성 및 원고 수치 동기화
+4. 반복측정 alpha/read-count 통계 수행
+5. PERMDISP 및 leave-one-participant-out PERMANOVA 수행
+6. Participant×site matched-block 거리 및 공유 Genus 분석
+7. Decontam threshold × filtering sensitivity 확장 분석
+8. Frontiers in Microbiomes 형식에 맞춰 Methods, Results, Discussion 및 Supplementary material 정리
+9. 최종 원고에서 equivalence 표현, Figure/Table 번호 및 software version 감사
