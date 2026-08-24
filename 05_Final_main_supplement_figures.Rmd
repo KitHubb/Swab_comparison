@@ -1485,11 +1485,10 @@ if (!final_only) {
 # -----------------------------------------------------------------------------
 ```
 
-# Figure 3 — shared taxa UpSet plots
+# Figure 3 — shared ASVs across sampling systems
 
 ```{r figure-3, message=FALSE, warning=FALSE}
-# 4. Figure 3: UpSet plots at ASV, Genus, and Species levels
-#    Taxa retained when mean relative abundance >=0.1% in each subset.
+# 4. Figure 3: UpSet plot at the ASV level without abundance filtering.
 # -----------------------------------------------------------------------------
 
 make_upset_data <- function(ps, site = NULL) {
@@ -1498,13 +1497,10 @@ make_upset_data <- function(ps, site = NULL) {
     ps <- prune_samples(keep_samples, ps) %>%
       prune_taxa(taxa_sums(.) > 0, .)
   }
-  ps_rel <- transform_sample_counts(ps, function(x) x / sum(x))
-  keep <- taxa_names(ps_rel)[taxa_sums(ps_rel) / nsamples(ps_rel) >= 0.001]
-  ps <- prune_taxa(keep, ps)
-  otu <- data.frame(as(otu_table(ps), "matrix"), check.names = FALSE)
-  if (!taxa_are_rows(ps)) otu <- t(otu)
   md <- data.frame(sample_data(ps), check.names = FALSE)
   md$sample_name <- sample_names(ps)
+  otu <- data.frame(as(otu_table(ps), "matrix"), check.names = FALSE)
+  if (!taxa_are_rows(ps)) otu <- t(otu)
   present <- otu > 0
   result <- sapply(swab_key$swab_type2, function(sw) {
     ids <- rownames(md)[md$swab_type2 == sw]
@@ -1516,8 +1512,8 @@ make_upset_data <- function(ps, site = NULL) {
   list(data = result, n_taxa = nrow(result))
 }
 
-make_upset <- function(obj, title) {
-  ComplexUpset::upset(
+make_upset <- function(obj, title, unit_label) {
+  p <- ComplexUpset::upset(
     obj$data,
     intersect = paste0("Type ", 1:5),
     name = "Sampling system",
@@ -1526,32 +1522,170 @@ make_upset <- function(obj, title) {
     sort_intersections_by = "cardinality",
     width_ratio = 0.2,
     base_annotations = list(
-      "Intersection size" = intersection_size(counts = TRUE)
+      "Intersection size" = intersection_size(
+        counts = TRUE,
+        bar_number_threshold = 1,
+        text_colors = c(on_background = "black", on_bar = "black"),
+        text = list(size = 2.2, angle = 90, hjust = 0, vjust = 0.5)
+      ) +
+        scale_y_continuous(expand = expansion(mult = c(0, 0.12)))
     )
   ) +
-    labs(title = paste0(title, " (n=", obj$n_taxa, " taxa)")) +
+    labs(title = paste0(title, " (n=", obj$n_taxa, " ", unit_label, ")")) +
     theme_bw(base_size = 8) +
-    theme(plot.title = element_text(face = "bold"), panel.grid = element_blank())
+    theme(
+      plot.title = element_text(face = "bold"), panel.grid = element_blank()
+    )
+
+  # The intersection-combination labels belong to the patchwork root plot.
+  # Set this theme element directly so ComplexUpset does not overwrite it.
+  p$theme$axis.text.x <- element_text(angle = 45, hjust = 1, vjust = 1)
+  p
 }
 
-make_upset_figure <- function(ps, level_name) {
+summarise_shared_asvs <- function(ps, obj, subset_name) {
+  system_cols <- paste0("Type ", 1:5)
+  shared_asv_ids <- obj$data$taxon_id[
+    rowSums(obj$data[, system_cols, drop = FALSE]) == length(system_cols)
+  ]
+
+  otu <- data.frame(as(otu_table(ps), "matrix"), check.names = FALSE)
+  if (!taxa_are_rows(ps)) otu <- t(otu)
+  shared_asv_ids <- intersect(shared_asv_ids, rownames(otu))
+
+  total_reads <- sum(otu)
+  shared_reads <- sum(otu[shared_asv_ids, , drop = FALSE])
+
+  tibble(
+    subset = subset_name,
+    retained_asvs = obj$n_taxa,
+    shared_by_all_five_asvs = length(shared_asv_ids),
+    total_reads = total_reads,
+    reads_from_shared_asvs = shared_reads,
+    shared_asv_relative_abundance_pct = 100 * shared_reads / total_reads
+  )
+}
+
+make_upset_figure <- function(ps) {
   up_total <- make_upset_data(ps)
   up_ac <- make_upset_data(ps, "Antecubital")
   up_fh <- make_upset_data(ps, "Forehead")
-  fig <- make_upset(up_total, "A  Total") /
-    make_upset(up_ac, "B  Antecubital fossa") /
-    make_upset(up_fh, "C  Forehead")
-  save_figure(fig, paste0("Figure3_UpSet_", level_name), 7.5, 11)
+  fig <- make_upset(up_total, "A  Total", "ASVs") /
+    make_upset(up_ac, "B  Antecubital fossa", "ASVs") /
+    make_upset(up_fh, "C  Forehead", "ASVs")
+  save_figure(fig, "Figure3_UpSet_ASV", 7.5, 11)
+
+  shared_summary <- bind_rows(
+    summarise_shared_asvs(ps, up_total, "Total"),
+    summarise_shared_asvs(
+      prune_samples(sample_names(ps)[as.character(sample_data(ps)$site_group) == "Antecubital"], ps) %>%
+        prune_taxa(taxa_sums(.) > 0, .),
+      up_ac,
+      "Antecubital fossa"
+    ),
+    summarise_shared_asvs(
+      prune_samples(sample_names(ps)[as.character(sample_data(ps)$site_group) == "Forehead"], ps) %>%
+        prune_taxa(taxa_sums(.) > 0, .),
+      up_fh,
+      "Forehead"
+    )
+  )
+  write.csv(
+    shared_summary,
+    file.path(out_dir, "Figure3_ASV_shared_all_five_summary.csv"),
+    row.names = FALSE
+  )
+
   if (!final_only) {
-    write.csv(up_total$data, file.path(out_dir, paste0("Figure3_", level_name, "_total.csv")), row.names = FALSE)
-    write.csv(up_ac$data, file.path(out_dir, paste0("Figure3_", level_name, "_antecubital.csv")), row.names = FALSE)
-    write.csv(up_fh$data, file.path(out_dir, paste0("Figure3_", level_name, "_forehead.csv")), row.names = FALSE)
+    write.csv(up_total$data, file.path(out_dir, "Figure3_ASV_total.csv"), row.names = FALSE)
+    write.csv(up_ac$data, file.path(out_dir, "Figure3_ASV_antecubital.csv"), row.names = FALSE)
+    write.csv(up_fh$data, file.path(out_dir, "Figure3_ASV_forehead.csv"), row.names = FALSE)
   }
 }
 
-make_upset_figure(phy, "ASV")
-make_upset_figure(tax_glom(phy, "Genus"), "Genus")
-make_upset_figure(tax_glom(phy, "Species"), "Species")
+make_upset_figure(phy)
+
+summarise_shared_genera <- function(ps, obj, subset_name) {
+  system_cols <- paste0("Type ", 1:5)
+  shared_genus_ids <- obj$data$taxon_id[
+    rowSums(obj$data[, system_cols, drop = FALSE]) == length(system_cols)
+  ]
+
+  otu <- data.frame(as(otu_table(ps), "matrix"), check.names = FALSE)
+  if (!taxa_are_rows(ps)) otu <- t(otu)
+  shared_genus_ids <- intersect(shared_genus_ids, rownames(otu))
+
+  total_reads <- sum(otu)
+  shared_reads <- sum(otu[shared_genus_ids, , drop = FALSE])
+
+  tibble(
+    subset = subset_name,
+    retained_genera = obj$n_taxa,
+    shared_by_all_five_genera = length(shared_genus_ids),
+    total_reads = total_reads,
+    reads_from_shared_genera = shared_reads,
+    shared_genus_relative_abundance_pct = 100 * shared_reads / total_reads
+  )
+}
+
+add_genus_labels <- function(obj, ps) {
+  genus_map <- tibble(
+    taxon_id = taxa_names(ps),
+    Genus = as.character(tax_table(ps)[, "Genus"])
+  )
+  left_join(obj$data, genus_map, by = "taxon_id") %>%
+    relocate(Genus, .after = taxon_id)
+}
+
+make_upset_figure_genus <- function(ps) {
+  ps_genus <- tax_glom(ps, taxrank = "Genus", NArm = FALSE) %>%
+    prune_taxa(taxa_sums(.) > 0, .)
+  up_total <- make_upset_data(ps_genus)
+  up_ac <- make_upset_data(ps_genus, "Antecubital")
+  up_fh <- make_upset_data(ps_genus, "Forehead")
+
+  fig <- make_upset(up_total, "A  Total", "genera") /
+    make_upset(up_ac, "B  Antecubital fossa", "genera") /
+    make_upset(up_fh, "C  Forehead", "genera")
+  save_figure(fig, "Figure3_UpSet_Genus", 7.5, 11)
+
+  ps_ac <- prune_samples(
+    sample_names(ps_genus)[as.character(sample_data(ps_genus)$site_group) == "Antecubital"],
+    ps_genus
+  ) %>% prune_taxa(taxa_sums(.) > 0, .)
+  ps_fh <- prune_samples(
+    sample_names(ps_genus)[as.character(sample_data(ps_genus)$site_group) == "Forehead"],
+    ps_genus
+  ) %>% prune_taxa(taxa_sums(.) > 0, .)
+
+  shared_summary <- bind_rows(
+    summarise_shared_genera(ps_genus, up_total, "Total"),
+    summarise_shared_genera(ps_ac, up_ac, "Antecubital fossa"),
+    summarise_shared_genera(ps_fh, up_fh, "Forehead")
+  )
+  write.csv(
+    shared_summary,
+    file.path(out_dir, "Figure3_Genus_shared_all_five_summary.csv"),
+    row.names = FALSE
+  )
+  write.csv(
+    add_genus_labels(up_total, ps_genus),
+    file.path(out_dir, "Figure3_Genus_total.csv"),
+    row.names = FALSE
+  )
+  write.csv(
+    add_genus_labels(up_ac, ps_ac),
+    file.path(out_dir, "Figure3_Genus_antecubital.csv"),
+    row.names = FALSE
+  )
+  write.csv(
+    add_genus_labels(up_fh, ps_fh),
+    file.path(out_dir, "Figure3_Genus_forehead.csv"),
+    row.names = FALSE
+  )
+}
+
+make_upset_figure_genus(phy)
 
 # -----------------------------------------------------------------------------
 ```
@@ -1945,7 +2079,6 @@ final_png <- c(
   "Figure2_bacterial_community_composition.png",
   "Figure3_UpSet_ASV.png",
   "Figure3_UpSet_Genus.png",
-  "Figure3_UpSet_Species.png",
   "FigureS1_participant_composition.png",
   "FigureS2_UniFrac_heatmaps.png",
   "FigureS3_participant_alpha_beta.png"
@@ -2058,9 +2191,7 @@ adonis2(
 adonis2(
   dist ~ subject_id,
   data = meta2,
-  permutations = 9999,
-  strata = meta2$subject_id
-)
+  permutations = 9999)
 
 
 
