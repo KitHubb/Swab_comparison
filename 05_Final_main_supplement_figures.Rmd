@@ -16,6 +16,8 @@ control sample을 제외하고 rarefaction한 뒤, 통계 분석과 각 패널 �
 # Packages and plotting helper functions
 
 ```{r packages-and-functions, message=FALSE, warning=FALSE}
+project_library <- file.path(getwd(), "R_library")
+if (dir.exists(project_library)) .libPaths(c(project_library, .libPaths()))
 suppressPackageStartupMessages({
   library(phyloseq)
   library(vegan)
@@ -1153,9 +1155,23 @@ Sys.setenv(MANUSCRIPT_FINAL_ONLY = "true")
 # This is the post-decontam RDS used as the starting point in the original Rmd.
 phy <- readRDS("./Phyloseq/phy_F270R240_260812_v4.rds")
 
-# Remove retained control samples and taxa with zero abundance.
-phy <- subset_samples(phy, control_status == "sample") %>%
+# Remove controls, then remove singleton ASVs (total abundance = 1)
+# across the 50 true samples, following the filtering sensitivity analysis.
+phy_true_unfiltered <- subset_samples(phy, control_status == "sample") %>%
   prune_taxa(taxa_sums(.) > 0, .)
+phy <- prune_taxa(taxa_sums(phy_true_unfiltered) > 1, phy_true_unfiltered)
+filter_summary <- data.frame(
+  analysis = "canonical_singleton",
+  retention_rule = "taxa_sums > 1",
+  samples = nsamples(phy),
+  asvs_before_filter = ntaxa(phy_true_unfiltered),
+  asvs_after_filter = ntaxa(phy),
+  asvs_removed = ntaxa(phy_true_unfiltered) - ntaxa(phy),
+  reads_before_filter = sum(sample_sums(phy_true_unfiltered)),
+  reads_after_filter = sum(sample_sums(phy)),
+  reads_removed = sum(sample_sums(phy_true_unfiltered)) - sum(sample_sums(phy)),
+  reads_retained_pct = 100 * sum(sample_sums(phy)) / sum(sample_sums(phy_true_unfiltered))
+)
 
 # Rarefy the post-decontam sample object using the existing analysis settings.
 set.seed(42)
@@ -1168,11 +1184,9 @@ phy_rar <- rarefy_even_depth(
 )
 
 final_only <- identical(tolower(Sys.getenv("MANUSCRIPT_FINAL_ONLY", "false")), "true")
-out_dir <- file.path(
-  getwd(),
-  if (final_only) "Final_main_supplement_figure_output" else "Manuscript_figure_set_output"
-)
+out_dir <- file.path(getwd(), "Final_main_singleton_canonical_20260824")
 if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+write.csv(filter_summary, file.path(out_dir, "feature_filter_summary.csv"), row.names = FALSE)
 
 swab_key <- data.frame(
   swab_type2 = c("Copan", "Puritan_gel", "Puritan_buffer", "Omni", "Eswab"),
@@ -1234,7 +1248,13 @@ make_pcoa <- function(ps, site, method, label) {
     )
   dist_obj <- phyloseq::distance(ps_site, method = method)
   md <- data.frame(sample_data(ps_site))
-  perm <- adonis2(dist_obj ~ swab_type2, data = md, permutations = 9999)
+  set.seed(42)
+  perm <- adonis2(
+    dist_obj ~ swab_type2,
+    data = md,
+    permutations = 9999,
+    strata = md$subject_id
+  )
   perm_r2 <- round(perm$R2[1], 3)
   perm_p <- perm$`Pr(>F)`[1]
   p_text <- ifelse(perm_p < 0.001, "<0.001", format(round(perm_p, 3), nsmall = 3))
@@ -1281,6 +1301,7 @@ make_sampling_alpha <- function(site) {
     ) +
     ggpubr::geom_pwc(
       method = "wilcox_test",
+      method.args = list(paired = TRUE, exact = FALSE),
       label = "{p.adj.signif}",
       p.adjust.method = "BH",
       step.increase = 0.10,
@@ -1331,7 +1352,8 @@ make_beta_subject_panel <- function(ps, site, method) {
     left_join(swab_key, by = "swab_type2")
   dist_obj <- phyloseq::distance(ps_site, method = method)
   md <- data.frame(sample_data(ps_site), check.names = FALSE)
-  perm <- adonis2(dist_obj ~ subject_id, data = md, permutations = 9999, strata = md$subject_id)
+  set.seed(42)
+  perm <- adonis2(dist_obj ~ subject_id, data = md, permutations = 9999)
   perm_r2 <- round(perm$R2[1], 3)
   perm_p <- perm$`Pr(>F)`[1]
   p_text <- ifelse(perm_p < 0.001, "<0.001", format(round(perm_p, 3), nsmall = 3))
@@ -1794,7 +1816,7 @@ save_figure(FigureS1, "FigureS1_participant_composition", 10.7, 10.8)
 ```{r tables-s3-s6, message=FALSE, warning=FALSE}
 # Tables S3-S6 use the same taxa as Figure S1: global mean relative abundance >1%.
 # "Others" is included in composition tables only, not in pairwise testing.
-table_dir <- Sys.getenv("DT_TABLE_DIR", unset = file.path(getwd(), "Tables"))
+table_dir <- file.path(out_dir, "Tables")
 dir.create(table_dir, recursive = TRUE, showWarnings = FALSE)
 
 composition_cutoff <- 0.01
@@ -1966,6 +1988,7 @@ make_participant_alpha <- function(site) {
     ) +
     ggpubr::geom_pwc(
       method = "wilcox_test",
+      method.args = list(paired = TRUE, exact = FALSE),
       label = "{p.adj.signif}",
       p.adjust.method = "BH",
       step.increase = 0.10,
