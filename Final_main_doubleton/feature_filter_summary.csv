@@ -1,0 +1,2 @@
+"analysis","retention_rule","samples","asvs_before_filter","asvs_after_filter","asvs_removed","reads_before_filter","reads_after_filter","reads_removed","reads_retained_pct"
+"doubleton","taxa_sums > 2",50,1855,1714,141,847149,846942,207,99.9755651012986
