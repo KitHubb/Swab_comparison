@@ -1,0 +1,5 @@
+"site_group","response","n_participants","n_systems","statistic","df","p_value","design"
+"Antecubital","Shannon",5,5,5.92,4,0.205202912003994,"Friedman repeated-measures omnibus test"
+"Antecubital","Observed",5,5,7.02040816326531,4,0.134813669720188,"Friedman repeated-measures omnibus test"
+"Forehead","Shannon",5,5,1.12,4,0.891086139604151,"Friedman repeated-measures omnibus test"
+"Forehead","Observed",5,5,2.56,4,0.633925045033283,"Friedman repeated-measures omnibus test"

@@ -33,6 +33,7 @@ permutations and a fixed rarefaction target of 5,876 reads.
 ```{r packages}
 suppressPackageStartupMessages({
   library(phyloseq)
+  library(ape)
   library(decontam)
   library(vegan)
   library(permute)
@@ -64,6 +65,20 @@ distance_methods <- c(
   bray_curtis = "bray"
 )
 target_depth <- 5876L
+
+# phyloseq's fast UniFrac implementation assumes a strictly bifurcating tree.
+# Feature pruning leaves a small number of polytomies in these objects. Resolve
+# them deterministically with zero-length branches; this changes no original
+# branch length or tip identity and prevents the fast-UniFrac matrix warning.
+prepare_unifrac_tree <- function(ps) {
+  tree <- phy_tree(ps)
+  if (!ape::is.binary(tree)) {
+    tree <- ape::multi2di(tree, random = FALSE)
+    phy_tree(ps) <- tree
+  }
+  stopifnot(ape::is.binary(phy_tree(ps)))
+  ps
+}
 ```
 
 # Reconstruct all analysis objects
@@ -76,6 +91,29 @@ otu_matrix <- function(ps) {
 }
 
 phy_pre <- readRDS("Phyloseq/phy_F270R240_260812_v3.rds")
+
+# Restore the control labels from the original metadata by exact sample ID.
+# In the saved v3 object, the five controls have NA control_status because the
+# original preprocessing converted these missing values to "control" only after
+# creating v3. The metadata records them explicitly as "negative-control".
+metadata_source <- read.delim(
+  "metadata/DT_metadata.tsv",
+  check.names = FALSE,
+  stringsAsFactors = FALSE
+)
+rownames(metadata_source) <- metadata_source$sample_id
+stopifnot(all(sample_names(phy_pre) %in% rownames(metadata_source)))
+metadata_source <- metadata_source[sample_names(phy_pre), , drop = FALSE]
+metadata_source$control_status <- ifelse(
+  metadata_source$control_status == "negative-control",
+  "control",
+  metadata_source$control_status
+)
+stopifnot(
+  sum(metadata_source$control_status == "sample") == 50L,
+  sum(metadata_source$control_status == "control") == 5L
+)
+sample_data(phy_pre) <- sample_data(metadata_source)
 sample_data(phy_pre)$is.neg <- sample_data(phy_pre)$control_status == "control"
 
 # Follow 01_Preprocessing.Rmd exactly: rerun prevalence-based decontam at each
@@ -201,6 +239,7 @@ sanity_checks
 
 ```{r permanova-permdisp}
 run_permanova <- function(ps, distance_name, method, variable) {
+  if (method %in% c("wunifrac", "unifrac")) ps <- prepare_unifrac_tree(ps)
   dist_obj <- phyloseq::distance(ps, method = method)
   md <- data.frame(sample_data(ps), check.names = FALSE)
   formula_obj <- as.formula(paste("dist_obj ~", variable))
@@ -225,6 +264,7 @@ run_permanova <- function(ps, distance_name, method, variable) {
 }
 
 run_permdisp <- function(ps, distance_name, method) {
+  if (method %in% c("wunifrac", "unifrac")) ps <- prepare_unifrac_tree(ps)
   dist_obj <- phyloseq::distance(ps, method = method)
   md <- data.frame(sample_data(ps), check.names = FALSE)
   dispersion <- betadisper(dist_obj, md$swab_type2, type = "median", bias.adjust = TRUE)
@@ -397,7 +437,7 @@ p_effect <- permanova_results %>%
   geom_line() + geom_point(size = 1.4) +
   facet_grid(distance_id ~ filter) +
   scale_colour_brewer(palette = "Dark2") +
-  labs(x = "Decontam threshold", y = expression(PERManova~R^2), colour = NULL) +
+  labs(x = "Decontam threshold", y = expression(PERMANOVA~R^2), colour = NULL) +
   theme_bw(base_size = 8) + theme(legend.position = "bottom")
 
 p_diagnostics <- integrated %>%

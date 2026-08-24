@@ -1,0 +1,5 @@
+"check","passed","observed"
+"27 combinations reconstructed",TRUE,"27"
+"threshold 0.5 ASV count matches v4",TRUE,"1855 vs 1855"
+"threshold 0.5 read count matches v4",TRUE,"847149 vs 847149"
+"all combinations retain true-sample metadata",TRUE,"50-50"

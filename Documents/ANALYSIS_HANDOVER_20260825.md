@@ -2,7 +2,7 @@
 
 - Date: 2026-08-25
 - Base commit: `dc9851c`
-- Status: canonical singleton validation completed; decontam-threshold benchmark blocked by pre-decontam control metadata
+- Status: canonical singleton validation, decontam-threshold benchmark, corrected UniFrac audit, leave-one-participant-out and matched-block analyses completed
 
 ## Completed validation
 
@@ -41,10 +41,10 @@ fraction, and system-exclusive read fraction. Each decontam threshold is reconst
 by rerunning `isContaminant()` as in `01_Preprocessing.Rmd`; the code does not manually
 threshold the returned p-values.
 
-## Blocking data issue
+## Previous blocking data issue (resolved)
 
-The benchmark must not be interpreted or reported yet. Its reconstruction sanity
-check intentionally failed at threshold 0.5:
+The initial reconstruction sanity check failed at threshold 0.5 and the incomplete
+benchmark was not interpreted at that stage:
 
 - reconstructed threshold 0.5/no-filter: 1,956 ASVs and 924,394 true-sample reads;
 - saved v4 threshold 0.5 object: 1,855 ASVs and 847,149 true-sample reads.
@@ -56,11 +56,59 @@ are labelled `sample`. Consequently, directly setting
 does not reconstruct the original contaminant calls. The saved v4 object contains the
 correct `control_status`, `is.neg`, `swab_type2`, and `SampleID` metadata.
 
-Before rerunning the benchmark, restore the v3 control metadata from the original
-metadata-generation step or `metadata/DT_metadata.tsv`. Do not infer control status
-solely from an ad hoc sample-name rule without checking the preprocessing record.
-After restoration, threshold 0.5/no-filter must reproduce exactly 1,855 ASVs,
-847,149 reads, and 50 true samples before the remaining 26 combinations are accepted.
+The prespecified resolution was to restore the v3 control metadata from the original
+metadata-generation step or `metadata/DT_metadata.tsv`, without inferring control
+status solely from an ad hoc sample-name rule. Threshold 0.5/no-filter was required
+to reproduce exactly 1,855 ASVs, 847,149 reads, and 50 true samples before accepting
+the remaining 26 combinations.
+
+### Resolution
+
+This issue was resolved from the original `metadata/DT_metadata.tsv`, which records
+the five controls as `negative-control`. The benchmark joins metadata by exact sample
+ID, normalizes `negative-control` to `control`, and verifies 50 true samples and five
+controls before calling `isContaminant()`. Threshold 0.5/no-filter now reproduces the
+saved v4 object exactly: 1,855 ASVs, 847,149 reads, 50 samples, and an identical ASV set.
+
+The 27-condition benchmark completed successfully. Thresholds 0.1--0.5 retained all
+50 samples at 5,876 reads and preserved the participant/site/system effect pattern.
+Thresholds 0.6--0.9 removed 17--36 samples from rarefaction and are boundary conditions,
+not directly comparable primary analyses.
+
+## Corrected UniFrac analysis
+
+An audit found that feature pruning left five polytomies in the rooted tree. Because
+phyloseq fast UniFrac assumes a bifurcating tree, all new UniFrac analyses resolve
+these polytomies deterministically with zero-length branches using
+`ape::multi2di(random = FALSE)`. Tip identities and original branch lengths are
+preserved. The corrected canonical singleton results are:
+
+| Distance | Participant R2 | Site R2 | System R2 | System p | PERMDISP p |
+|---|---:|---:|---:|---:|---:|
+| Weighted UniFrac | 0.4482 | 0.1682 | 0.0152 | 0.9981 | 0.9898 |
+| Unweighted UniFrac | 0.2620 | 0.0633 | 0.0558 | 0.8324 | 0.9519 |
+| Bray-Curtis | 0.4080 | 0.1155 | 0.0300 | 0.9947 | 0.7993 |
+
+Existing manuscript UniFrac figures and values must be regenerated before submission.
+
+## Additional Frontiers robustness analyses
+
+`09_Frontiers_robustness_validation.R` completed:
+
+- leave-one-participant-out PERMANOVA and PERMDISP;
+- participant-by-site matched distance benchmarking;
+- block-specific ASV and Genus intersection/read fractions;
+- repeated-measures Friedman tests for alpha diversity and post-filter reads;
+- UniFrac tree audit and reproducibility checks.
+
+No leave-one-participant-out run detected a sampling-system effect. Within-participant,
+within-site distances between systems were lower than distances across sites or
+participants for all three distances. The median block-specific read fraction assigned
+to features shared by all five systems was 79.67% at ASV level and 95.12% at Genus
+level.
+
+See `Documents/FRONTIERS_BENCHMARK_REPORT_20260825.md` for the full critical assessment,
+journal benchmark, novelty argument, limitations, and submission checklist.
 
 ## Existing filtering-sensitivity interpretation
 

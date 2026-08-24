@@ -1,0 +1,3 @@
+"taxonomic_level","blocks","median_shared_features","shared_features_min","shared_features_max","median_intersection_over_union","median_shared_read_pct","shared_read_pct_min","shared_read_pct_max"
+"ASV",10,7.5,2,38,0.054037612542149,79.6724688068726,46.2187811314819,98.078952216658
+"Genus",10,7,3,35,0.115900621118012,95.115941853459,81.2573186290788,99.7772455490981
