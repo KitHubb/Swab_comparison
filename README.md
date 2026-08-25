@@ -1,67 +1,121 @@
-# Swab Comparison: V1–V3 16S rRNA Sequencing
+# Comparative Evaluation of Skin Microbiome Sampling Systems
 
-This repository contains the analysis workflow and supporting materials for a comparative study of **five skin swab sampling methods** based on **V1–V3 16S rRNA gene sequencing**.
+This repository contains the reproducible R workflow and analysis products for a within-participant pilot study comparing five integrated swab–collection-medium systems for bacterial microbiome sampling at two skin sites. Bacterial communities were characterized by V1–V3 16S rRNA gene amplicon sequencing.
 
-The study aims to evaluate how different skin swab methods affect bacterial community profiles and to identify the methodological differences that may influence microbiome characterization.
+## Scientific objective
 
-## Study Overview
+The primary objective is to determine whether the choice of sampling system materially affects estimates of skin bacterial diversity and community composition. Because skin samples contain relatively low microbial biomass, the analysis also evaluates whether conclusions about sampling-system effects remain stable across contaminant-removal thresholds, rare-feature filtering rules, and beta-diversity metrics.
 
-* **Target:** Skin bacterial microbiome
-* **Sequencing region:** 16S rRNA V1–V3
-* **Comparison:** Five skin swab sampling methods
-* **Study purpose:** Methodological comparison of skin microbiome sampling
-* **Analysis:** Amplicon sequence analysis and downstream statistical analysis
+The sensitivity analysis supports the sampling-system comparison; it is not treated as a separate optimization study. Participant identity and anatomical site are retained as major biological sources of variation in the statistical design.
 
-## Repository Structure
+## Study design
+
+- Five participants
+- Two anatomical sites: antecubital fossa and forehead
+- Five sampling systems per participant and site
+- Fifty biological samples in a repeated-measures design
+- Extraction-negative controls used for prevalence-based contaminant identification
+- V1–V3 16S rRNA gene amplicon sequencing
+- Amplicon sequence variant (ASV)-based analysis
+
+## Analysis framework
+
+### Primary analysis
+
+The manuscript analysis uses a post-decontamination phyloseq object, removes control samples and singleton ASVs, and rarefies biological samples to 5,876 reads. It includes:
+
+- Shannon diversity and observed ASVs
+- Bray–Curtis, binary Jaccard, unweighted UniFrac, and weighted UniFrac analyses
+- bacterial community composition at phylum and genus levels
+- ASV- and genus-level overlap among sampling systems
+- participant- and site-stratified analyses
+- univariable PERMANOVA models that account for the repeated-measures structure where applicable
+- Benjamini–Hochberg false-discovery-rate correction for multiple testing
+
+PERMANOVA and other permutation-based procedures use 9,999 permutations and a random seed of 42.
+
+### Integrated sensitivity analysis
+
+The supplementary validation workflow evaluates:
+
+- no decontamination and prevalence-based decontam thresholds from 0.1 to 0.9
+- multiple rare-feature filtering rules at the selected threshold of 0.5
+- retention of biological and control reads
+- retention of samples at the prespecified rarefaction depth
+- alpha-diversity stability
+- PERMANOVA and PERMDISP results
+- composition and ordination concordance
+- matched within-participant and within-site distances
+- Bray–Curtis, binary Jaccard, Aitchison, unweighted UniFrac, and weighted UniFrac distances
+- Aitchison pseudocount sensitivity
+
+The principal Aitchison analysis uses a pseudocount of 0.5. Reusable analysis objects are saved during the integrated workflow so that additional summaries can be generated without repeating all upstream calculations.
+
+## Repository structure
 
 ```text
-./
-├── Proj_DT_Swab.Rproj
-├── Script/
-├── metadata/
+.
+├── 01_Preprocessing.Rmd
+├── 02_Microbiome_analysis.Rmd
+├── 05_Final_main_supplement_figures.Rmd
+├── 06_Integrated_decontam_filter_sampling_system_analysis.Rmd
+├── Documents/
 ├── Figures/
+├── Final_main_singleton_canonical_20260824/
+├── Integrated_sensitivity_output/
+│   ├── Figures/
+│   ├── RDS/
+│   └── Tables/
+├── metadata/
+├── Phyloseq/
+├── Script/
 ├── Tables/
-├── .gitignore
+├── Rproj_DT_Swab.Rproj
 └── README.md
 ```
 
-## Analysis Workflow
+### Core files
 
-The analysis includes:
+| File | Purpose |
+|---|---|
+| `01_Preprocessing.Rmd` | Metadata integration, quality control, contaminant assessment, and construction of analysis-ready phyloseq objects |
+| `02_Microbiome_analysis.Rmd` | Core microbiome analyses retained from the study workflow |
+| `05_Final_main_supplement_figures.Rmd` | Canonical singleton-filtered manuscript tables and main/supplementary figures |
+| `06_Integrated_decontam_filter_sampling_system_analysis.Rmd` | Integrated decontamination and feature-filtering sensitivity analysis |
 
-1. Sample and metadata quality control
-2. 16S rRNA V1–V3 amplicon sequence processing
-3. Taxonomic classification
-4. Alpha diversity analysis
-5. Beta diversity analysis
-6. Community composition analysis
-7. Differential abundance analysis
-8. Statistical comparison among the five sampling methods
-9. Visualization and figure generation
+### Principal outputs
 
-## Reproducibility
+- `Final_main_singleton_canonical_20260824/`: manuscript-ready figures and tables from the canonical analysis
+- `Integrated_sensitivity_output/Figures/`: sensitivity-analysis figures
+- `Integrated_sensitivity_output/Tables/`: complete numerical results and validation checks
+- `Integrated_sensitivity_output/RDS/`: reusable objects generated by the integrated workflow
+- `Documents/`: manuscript-supporting reports, literature comparison, and presentation materials
 
-R-based analyses are organized as an RStudio project and managed using `renv` where applicable.
+## Reproducing the analysis
 
-Large sequencing files, intermediate files, and analysis outputs are **not tracked in this repository**.
+Open `Rproj_DT_Swab.Rproj` in RStudio and run the documents from the repository root in the following order:
 
-## Data Availability
+1. `01_Preprocessing.Rmd`
+2. `02_Microbiome_analysis.Rmd`
+3. `05_Final_main_supplement_figures.Rmd`
+4. `06_Integrated_decontam_filter_sampling_system_analysis.Rmd`
 
-Raw sequencing data and other large files are maintained separately from this repository.
+The final-figure and integrated-sensitivity documents can be rerun from their saved phyloseq inputs when upstream preprocessing does not need to be repeated. File paths are repository-relative unless an input location is explicitly documented in the corresponding R Markdown file.
 
-Data availability and accession information will be provided in the associated manuscript.
+Key R packages include `phyloseq`, `decontam`, `vegan`, `permute`, `tidyverse`, `ggplot2`, and related visualization packages loaded by the individual documents. Package versions should be recorded in the computational environment used for the final manuscript release.
+
+## Interpretation
+
+This repository is designed to distinguish biological variation from variation associated with the sampling system. The sensitivity analyses quantify how low-biomass preprocessing decisions alter data retention and effect estimates, and whether the main inference regarding sampling-system differences is preserved. Results from aggressive filtering conditions are presented as sensitivity analyses rather than as alternative primary analyses.
+
+## Data availability
+
+Processed phyloseq objects and analysis metadata required by the R workflow are organized within this project. Raw FASTQ files are maintained separately because of file size and participant-data governance requirements. Accession information and public-data availability will be added to the associated manuscript when finalized.
 
 ## Status
 
-**Analysis in progress.**
-
-This repository is being developed alongside the manuscript and will be updated as the analysis workflow is finalized.
+The decontamination-based reanalysis, canonical manuscript analysis, and integrated preprocessing-sensitivity analysis have been completed. Manuscript text and supplementary materials remain under revision.
 
 ## Citation
 
-If you use this repository or the associated analysis workflow, please cite the corresponding publication:
-
-> To be added after publication.
-
-```
-```
+Please cite the associated article when it becomes available. A complete citation and data accession will be added after publication.
