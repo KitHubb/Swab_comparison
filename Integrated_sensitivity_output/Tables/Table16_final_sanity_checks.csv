@@ -11,3 +11,5 @@
 "no tree transformation function used in analysis",TRUE
 "threshold axis contains None plus 0.1-0.9",TRUE
 "filter axis contains all nine prespecified filters",TRUE
+"fixed-sample filtering comparison retains the same 50 samples",TRUE
+"fixed-sample matched-distance units have expected block counts",TRUE

@@ -376,12 +376,14 @@ repeated-measures omnibus tests</a></li>
 features, and matched-block agreement</a></li>
 <li><a href="#ordination-concordance-before-and-after-decontam" id="toc-ordination-concordance-before-and-after-decontam"><span class="toc-section-number">9</span> Ordination concordance before and
 after decontam</a></li>
-<li><a href="#taxa-removed-at-threshold-0.5" id="toc-taxa-removed-at-threshold-0.5"><span class="toc-section-number">10</span> Taxa removed at threshold
+<li><a href="#fixed-sample-matched-distance-validation-of-filtering-effects" id="toc-fixed-sample-matched-distance-validation-of-filtering-effects"><span class="toc-section-number">10</span> Fixed-sample matched-distance
+validation of filtering effects</a></li>
+<li><a href="#taxa-removed-at-threshold-0.5" id="toc-taxa-removed-at-threshold-0.5"><span class="toc-section-number">11</span> Taxa removed at threshold
 0.5</a></li>
-<li><a href="#integrated-summaries" id="toc-integrated-summaries"><span class="toc-section-number">11</span> Integrated summaries</a></li>
-<li><a href="#figures" id="toc-figures"><span class="toc-section-number">12</span> Figures</a></li>
-<li><a href="#reproducibility-record" id="toc-reproducibility-record"><span class="toc-section-number">13</span> Reproducibility record</a></li>
-<li><a href="#interpretation-guardrails" id="toc-interpretation-guardrails"><span class="toc-section-number">14</span> Interpretation guardrails</a></li>
+<li><a href="#integrated-summaries" id="toc-integrated-summaries"><span class="toc-section-number">12</span> Integrated summaries</a></li>
+<li><a href="#figures" id="toc-figures"><span class="toc-section-number">13</span> Figures</a></li>
+<li><a href="#reproducibility-record" id="toc-reproducibility-record"><span class="toc-section-number">14</span> Reproducibility record</a></li>
+<li><a href="#interpretation-guardrails" id="toc-interpretation-guardrails"><span class="toc-section-number">15</span> Interpretation guardrails</a></li>
 </ul>
 </div>
 
@@ -1125,8 +1127,192 @@ procrustes_results &lt;- bind_rows(threshold_procrustes, filter_procrustes)
 
 write.csv(procrustes_results, file.path(tab_dir, &quot;Table11_ordination_Procrustes.csv&quot;), row.names = FALSE)</code></pre>
 </div>
-<div id="taxa-removed-at-threshold-0.5" class="section level1" number="10">
-<h1><span class="header-section-number">10</span> Taxa removed at
+<div id="fixed-sample-matched-distance-validation-of-filtering-effects" class="section level1" number="10">
+<h1><span class="header-section-number">10</span> Fixed-sample
+matched-distance validation of filtering effects</h1>
+<p>This analysis directly tests whether filtering reduces dissimilarity
+among the five sampling systems within the same participant and
+anatomical site. All 50 biological samples are retained for every
+filtering condition, so changes in distance cannot be attributed to
+sample exclusion at the rarefaction step. Distances between participants
+and between anatomical sites are calculated in parallel to determine
+whether filtering simply compresses all biological variation.</p>
+<pre class="r"><code>filter_distance_objects &lt;- lapply(filter_objects, function(ps) {
+  stopifnot(setequal(sample_names(ps), sample_names(filter_base)))
+  stopifnot(all(sample_sums(ps) &gt; 0))
+  transform_sample_counts(ps, function(x) x / sum(x)) %&gt;% prune_nonzero()
+})
+
+extract_matched_distance_units &lt;- function(ps, condition_id, distance_name,
+                                           distance_method) {
+  dist_obj &lt;- phyloseq::distance(ps, method = distance_method)
+  dist_mat &lt;- as.matrix(dist_obj)
+  md &lt;- data.frame(sample_data(ps), check.names = FALSE) %&gt;%
+    rownames_to_column(&quot;sample_name&quot;)
+  pairs &lt;- which(upper.tri(dist_mat), arr.ind = TRUE)
+
+  pair_df &lt;- tibble(
+    sample_1 = rownames(dist_mat)[pairs[, 1]],
+    sample_2 = colnames(dist_mat)[pairs[, 2]],
+    distance_value = dist_mat[pairs]
+  ) %&gt;%
+    left_join(
+      md %&gt;% select(sample_1 = sample_name,
+                    subject_1 = subject_id, site_1 = site_group,
+                    system_1 = swab_type2),
+      by = &quot;sample_1&quot;
+    ) %&gt;%
+    left_join(
+      md %&gt;% select(sample_2 = sample_name,
+                    subject_2 = subject_id, site_2 = site_group,
+                    system_2 = swab_type2),
+      by = &quot;sample_2&quot;
+    ) %&gt;%
+    mutate(
+      pair_class = case_when(
+        subject_1 == subject_2 &amp; site_1 == site_2 &amp; system_1 != system_2 ~
+          &quot;within_participant_site_between_systems&quot;,
+        subject_1 != subject_2 &amp; site_1 == site_2 &amp; system_1 == system_2 ~
+          &quot;between_participants_matched_site_system&quot;,
+        subject_1 == subject_2 &amp; site_1 != site_2 &amp; system_1 == system_2 ~
+          &quot;between_sites_matched_participant_system&quot;,
+        TRUE ~ NA_character_
+      ),
+      unit_id = case_when(
+        pair_class == &quot;within_participant_site_between_systems&quot; ~
+          paste(subject_1, site_1, sep = &quot;__&quot;),
+        pair_class == &quot;between_participants_matched_site_system&quot; ~
+          paste(site_1, system_1, sep = &quot;__&quot;),
+        pair_class == &quot;between_sites_matched_participant_system&quot; ~
+          paste(subject_1, system_1, sep = &quot;__&quot;),
+        TRUE ~ NA_character_
+      )
+    ) %&gt;%
+    filter(!is.na(pair_class)) %&gt;%
+    group_by(pair_class, unit_id) %&gt;%
+    summarise(
+      unit_median_distance = median(distance_value),
+      pair_count = n(),
+      .groups = &quot;drop&quot;
+    ) %&gt;%
+    mutate(
+      condition_axis = &quot;filter_at_threshold_0.5_fixed_50_samples&quot;,
+      condition_id = condition_id,
+      distance = distance_name,
+      .before = 1
+    )
+  pair_df
+}
+
+fixed_sample_distance_units &lt;- bind_rows(lapply(names(filter_distance_objects), function(id) {
+  bind_rows(lapply(names(distance_methods), function(distance_name) {
+    extract_matched_distance_units(
+      filter_distance_objects[[id]], id, distance_name,
+      distance_methods[[distance_name]]
+    )
+  }))
+}))
+
+baseline_units &lt;- fixed_sample_distance_units %&gt;%
+  filter(condition_id == &quot;no_filter&quot;) %&gt;%
+  select(distance, pair_class, unit_id,
+         baseline_distance = unit_median_distance)
+
+fixed_sample_distance_units &lt;- fixed_sample_distance_units %&gt;%
+  left_join(baseline_units, by = c(&quot;distance&quot;, &quot;pair_class&quot;, &quot;unit_id&quot;)) %&gt;%
+  mutate(
+    absolute_change_from_no_filter = unit_median_distance - baseline_distance,
+    percent_change_from_no_filter = ifelse(
+      baseline_distance &gt; 0,
+      100 * absolute_change_from_no_filter / baseline_distance,
+      NA_real_
+    )
+  )
+
+fixed_sample_distance_summary &lt;- fixed_sample_distance_units %&gt;%
+  group_by(condition_id, distance, pair_class) %&gt;%
+  summarise(
+    n_units = n(),
+    median_distance = median(unit_median_distance),
+    IQR_distance = IQR(unit_median_distance),
+    median_absolute_change = median(absolute_change_from_no_filter),
+    median_percent_change = median(percent_change_from_no_filter, na.rm = TRUE),
+    .groups = &quot;drop&quot;
+  )
+
+paired_filter_tests &lt;- fixed_sample_distance_units %&gt;%
+  filter(condition_id != &quot;no_filter&quot;) %&gt;%
+  group_by(condition_id, distance, pair_class) %&gt;%
+  group_modify(~{
+    fit &lt;- tryCatch(
+      wilcox.test(
+        .x$unit_median_distance,
+        .x$baseline_distance,
+        paired = TRUE,
+        alternative = &quot;two.sided&quot;,
+        exact = FALSE
+      ),
+      error = function(e) NULL
+    )
+    tibble(
+      n_units = nrow(.x),
+      median_change = median(.x$absolute_change_from_no_filter),
+      median_percent_change = median(.x$percent_change_from_no_filter, na.rm = TRUE),
+      statistic = if (is.null(fit)) NA_real_ else unname(fit$statistic),
+      p_value = if (is.null(fit)) NA_real_ else fit$p.value
+    )
+  }) %&gt;%
+  ungroup() %&gt;%
+  group_by(distance, pair_class) %&gt;%
+  mutate(
+    p_adjusted_bonferroni = p.adjust(p_value, method = &quot;bonferroni&quot;),
+    p_adjusted_BH = p.adjust(p_value, method = &quot;BH&quot;)
+  ) %&gt;%
+  ungroup()
+
+distance_signal_ratios &lt;- fixed_sample_distance_summary %&gt;%
+  select(condition_id, distance, pair_class, median_distance) %&gt;%
+  pivot_wider(names_from = pair_class, values_from = median_distance) %&gt;%
+  mutate(
+    participant_to_system_ratio =
+      between_participants_matched_site_system /
+      within_participant_site_between_systems,
+    site_to_system_ratio =
+      between_sites_matched_participant_system /
+      within_participant_site_between_systems
+  ) %&gt;%
+  group_by(distance) %&gt;%
+  mutate(
+    participant_ratio_retained_pct = 100 * participant_to_system_ratio /
+      participant_to_system_ratio[condition_id == &quot;no_filter&quot;],
+    site_ratio_retained_pct = 100 * site_to_system_ratio /
+      site_to_system_ratio[condition_id == &quot;no_filter&quot;]
+  ) %&gt;%
+  ungroup()
+
+write.csv(
+  fixed_sample_distance_units,
+  file.path(tab_dir, &quot;Table17_fixed50_matched_distance_units.csv&quot;),
+  row.names = FALSE
+)
+write.csv(
+  fixed_sample_distance_summary,
+  file.path(tab_dir, &quot;Table18_fixed50_matched_distance_summary.csv&quot;),
+  row.names = FALSE
+)
+write.csv(
+  paired_filter_tests,
+  file.path(tab_dir, &quot;Table19_fixed50_paired_filter_tests.csv&quot;),
+  row.names = FALSE
+)
+write.csv(
+  distance_signal_ratios,
+  file.path(tab_dir, &quot;Table20_fixed50_signal_ratios.csv&quot;),
+  row.names = FALSE
+)</code></pre>
+</div>
+<div id="taxa-removed-at-threshold-0.5" class="section level1" number="11">
+<h1><span class="header-section-number">11</span> Taxa removed at
 threshold 0.5</h1>
 <pre class="r"><code>calls_05 &lt;- decontam_calls[[&quot;0.5&quot;]]
 removed_ids &lt;- rownames(calls_05)[calls_05$contaminant]
@@ -1164,8 +1350,8 @@ removed_genus &lt;- removed_taxa %&gt;%
 write.csv(removed_taxa, file.path(tab_dir, &quot;Table12_ASVs_removed_at_threshold_0.5.csv&quot;), row.names = FALSE)
 write.csv(removed_genus, file.path(tab_dir, &quot;Table13_Genera_removed_at_threshold_0.5.csv&quot;), row.names = FALSE)</code></pre>
 </div>
-<div id="integrated-summaries" class="section level1" number="11">
-<h1><span class="header-section-number">11</span> Integrated
+<div id="integrated-summaries" class="section level1" number="12">
+<h1><span class="header-section-number">12</span> Integrated
 summaries</h1>
 <pre class="r"><code>threshold_effect_wide &lt;- permanova_all %&gt;%
   filter(condition_axis == &quot;decontam_threshold&quot;) %&gt;%
@@ -1228,8 +1414,8 @@ filter_integrated &lt;- filter_retention %&gt;%
 write.csv(threshold_integrated, file.path(tab_dir, &quot;Table14_integrated_decontam_threshold_results.csv&quot;), row.names = FALSE)
 write.csv(filter_integrated, file.path(tab_dir, &quot;Table15_integrated_filter_results.csv&quot;), row.names = FALSE)</code></pre>
 </div>
-<div id="figures" class="section level1" number="12">
-<h1><span class="header-section-number">12</span> Figures</h1>
+<div id="figures" class="section level1" number="13">
+<h1><span class="header-section-number">13</span> Figures</h1>
 <pre class="r"><code>threshold_plot_data &lt;- threshold_retention %&gt;%
   select(threshold_numeric, true_reads_retained_pct, control_reads_retained_pct) %&gt;%
   pivot_longer(
@@ -1399,10 +1585,94 @@ p_shared &lt;- aggregate_sharing_all %&gt;%
 ggsave(file.path(fig_dir, &quot;Figure6_shared_genus_read_fraction.png&quot;),
        p_shared, width = 11, height = 5, dpi = 600)
 ggsave(file.path(fig_dir, &quot;Figure6_shared_genus_read_fraction.tiff&quot;),
-       p_shared, width = 11, height = 5, dpi = 600, compression = &quot;lzw&quot;)</code></pre>
+       p_shared, width = 11, height = 5, dpi = 600, compression = &quot;lzw&quot;)
+
+filter_display_levels &lt;- names(filter_objects)
+pair_class_labels &lt;- c(
+  within_participant_site_between_systems = &quot;Between systems\nwithin participant-site&quot;,
+  between_participants_matched_site_system = &quot;Between participants\nmatched by site-system&quot;,
+  between_sites_matched_participant_system = &quot;Between sites\nmatched by participant-system&quot;
+)
+
+p_fixed_change &lt;- fixed_sample_distance_summary %&gt;%
+  filter(condition_id != &quot;no_filter&quot;) %&gt;%
+  mutate(
+    condition_id = factor(condition_id, levels = filter_display_levels),
+    pair_class = recode(pair_class, !!!pair_class_labels),
+    distance = recode(
+      distance,
+      weighted_unifrac = &quot;Weighted UniFrac&quot;,
+      unweighted_unifrac = &quot;Unweighted UniFrac&quot;,
+      bray_curtis = &quot;Bray-Curtis&quot;
+    )
+  ) %&gt;%
+  ggplot(aes(condition_id, median_percent_change, colour = pair_class,
+             group = pair_class)) +
+  geom_hline(yintercept = 0, linetype = 2, colour = &quot;grey50&quot;) +
+  geom_line() + geom_point(size = 2) +
+  facet_wrap(~distance, scales = &quot;free_y&quot;) +
+  scale_colour_brewer(palette = &quot;Dark2&quot;) +
+  labs(
+    x = &quot;Filter at decontam threshold 0.5&quot;,
+    y = &quot;Median distance change from no filter (%)&quot;,
+    colour = NULL
+  ) +
+  theme_bw(base_size = 9) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = &quot;bottom&quot;
+  )
+
+ggsave(file.path(fig_dir, &quot;Figure7_fixed50_matched_distance_change.png&quot;),
+       p_fixed_change, width = 12, height = 6, dpi = 600)
+ggsave(file.path(fig_dir, &quot;Figure7_fixed50_matched_distance_change.tiff&quot;),
+       p_fixed_change, width = 12, height = 6, dpi = 600, compression = &quot;lzw&quot;)
+
+p_signal_ratio &lt;- distance_signal_ratios %&gt;%
+  select(condition_id, distance,
+         participant_to_system_ratio, site_to_system_ratio) %&gt;%
+  pivot_longer(
+    cols = c(participant_to_system_ratio, site_to_system_ratio),
+    names_to = &quot;signal&quot;,
+    values_to = &quot;signal_to_system_ratio&quot;
+  ) %&gt;%
+  mutate(
+    condition_id = factor(condition_id, levels = filter_display_levels),
+    signal = recode(
+      signal,
+      participant_to_system_ratio = &quot;Participant/system-distance ratio&quot;,
+      site_to_system_ratio = &quot;Site/system-distance ratio&quot;
+    ),
+    distance = recode(
+      distance,
+      weighted_unifrac = &quot;Weighted UniFrac&quot;,
+      unweighted_unifrac = &quot;Unweighted UniFrac&quot;,
+      bray_curtis = &quot;Bray-Curtis&quot;
+    )
+  ) %&gt;%
+  ggplot(aes(condition_id, signal_to_system_ratio, colour = signal,
+             group = signal)) +
+  geom_line() + geom_point(size = 2) +
+  facet_wrap(~distance, scales = &quot;free_y&quot;) +
+  scale_colour_brewer(palette = &quot;Set1&quot;) +
+  labs(
+    x = &quot;Filter at decontam threshold 0.5&quot;,
+    y = &quot;Biological-signal / within-block system-distance ratio&quot;,
+    colour = NULL
+  ) +
+  theme_bw(base_size = 9) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = &quot;bottom&quot;
+  )
+
+ggsave(file.path(fig_dir, &quot;Figure8_fixed50_signal_preservation_ratio.png&quot;),
+       p_signal_ratio, width = 12, height = 6, dpi = 600)
+ggsave(file.path(fig_dir, &quot;Figure8_fixed50_signal_preservation_ratio.tiff&quot;),
+       p_signal_ratio, width = 12, height = 6, dpi = 600, compression = &quot;lzw&quot;)</code></pre>
 </div>
-<div id="reproducibility-record" class="section level1" number="13">
-<h1><span class="header-section-number">13</span> Reproducibility
+<div id="reproducibility-record" class="section level1" number="14">
+<h1><span class="header-section-number">14</span> Reproducibility
 record</h1>
 <pre class="r"><code>final_checks &lt;- bind_rows(
   validation %&gt;% select(check, passed),
@@ -1413,7 +1683,9 @@ record</h1>
       &quot;all PROTEST permutation runs record 9999 permutations&quot;,
       &quot;no tree transformation function used in analysis&quot;,
       &quot;threshold axis contains None plus 0.1-0.9&quot;,
-      &quot;filter axis contains all nine prespecified filters&quot;
+      &quot;filter axis contains all nine prespecified filters&quot;,
+      &quot;fixed-sample filtering comparison retains the same 50 samples&quot;,
+      &quot;fixed-sample matched-distance units have expected block counts&quot;
     ),
     passed = c(
       all(permanova_all$permutations == permutations_n),
@@ -1421,7 +1693,20 @@ record</h1>
       all(procrustes_results$permutations == permutations_n),
       identical(phy_tree(phy_pre), original_tree),
       setequal(names(threshold_objects), threshold_labels),
-      setequal(names(filter_objects), filter_ids)
+      setequal(names(filter_objects), filter_ids),
+      all(vapply(filter_distance_objects, nsamples, integer(1)) == 50L),
+      all(
+        fixed_sample_distance_units %&gt;%
+          distinct(condition_id, distance, pair_class, unit_id) %&gt;%
+          count(condition_id, distance, pair_class) %&gt;%
+          mutate(expected = case_when(
+            pair_class == &quot;within_participant_site_between_systems&quot; ~ 10L,
+            pair_class == &quot;between_participants_matched_site_system&quot; ~ 10L,
+            pair_class == &quot;between_sites_matched_participant_system&quot; ~ 25L
+          )) %&gt;%
+          transmute(ok = n == expected) %&gt;%
+          pull(ok)
+      )
     )
   )
 )
@@ -1438,6 +1723,8 @@ writeLines(
     &quot;Existing phylogenetic tree used without modification&quot;,
     &quot;Threshold axis: no decontam and prevalence thresholds 0.1-0.9 with singleton removal&quot;,
     &quot;Filter axis: nine filters at decontam threshold 0.5&quot;,
+    &quot;Fixed-sample distance validation: the same 50 samples under every filter&quot;,
+    &quot;Paired units: participant-site, site-system, and participant-system blocks&quot;,
     &quot;Rarefaction depth: 5876&quot;,
     &quot;Permutation tests: 9999&quot;,
     &quot;Random seed: 42&quot;,
@@ -1447,24 +1734,26 @@ writeLines(
 )
 capture.output(sessionInfo(), file = file.path(out_dir, &quot;sessionInfo.txt&quot;))
 final_checks</code></pre>
-<pre><code>## # A tibble: 12 × 2
-##    check                                                 passed
-##    &lt;chr&gt;                                                 &lt;lgl&gt; 
-##  1 50 true and five control samples restored             TRUE  
-##  2 threshold 0.5 ASV count matches saved v4              TRUE  
-##  3 threshold 0.5 true-sample reads match saved v4        TRUE  
-##  4 threshold 0.5 ASV identities match saved v4           TRUE  
-##  5 preprocessing tree object was not modified            TRUE  
-##  6 prevalence &gt;=10% equals prevalence &gt;=5 at n=50        TRUE  
-##  7 all PERMANOVA tests record 9999 permutations          TRUE  
-##  8 all PERMDISP tests record 9999 permutations           TRUE  
-##  9 all PROTEST permutation runs record 9999 permutations TRUE  
-## 10 no tree transformation function used in analysis      TRUE  
-## 11 threshold axis contains None plus 0.1-0.9             TRUE  
-## 12 filter axis contains all nine prespecified filters    TRUE</code></pre>
+<pre><code>## # A tibble: 14 × 2
+##    check                                                          passed
+##    &lt;chr&gt;                                                          &lt;lgl&gt; 
+##  1 50 true and five control samples restored                      TRUE  
+##  2 threshold 0.5 ASV count matches saved v4                       TRUE  
+##  3 threshold 0.5 true-sample reads match saved v4                 TRUE  
+##  4 threshold 0.5 ASV identities match saved v4                    TRUE  
+##  5 preprocessing tree object was not modified                     TRUE  
+##  6 prevalence &gt;=10% equals prevalence &gt;=5 at n=50                 TRUE  
+##  7 all PERMANOVA tests record 9999 permutations                   TRUE  
+##  8 all PERMDISP tests record 9999 permutations                    TRUE  
+##  9 all PROTEST permutation runs record 9999 permutations          TRUE  
+## 10 no tree transformation function used in analysis               TRUE  
+## 11 threshold axis contains None plus 0.1-0.9                      TRUE  
+## 12 filter axis contains all nine prespecified filters             TRUE  
+## 13 fixed-sample filtering comparison retains the same 50 samples  TRUE  
+## 14 fixed-sample matched-distance units have expected block counts TRUE</code></pre>
 </div>
-<div id="interpretation-guardrails" class="section level1" number="14">
-<h1><span class="header-section-number">14</span> Interpretation
+<div id="interpretation-guardrails" class="section level1" number="15">
+<h1><span class="header-section-number">15</span> Interpretation
 guardrails</h1>
 <ul>
 <li>The primary topic is the comparison of the five integrated sampling

@@ -756,6 +756,192 @@ procrustes_results <- bind_rows(threshold_procrustes, filter_procrustes)
 write.csv(procrustes_results, file.path(tab_dir, "Table11_ordination_Procrustes.csv"), row.names = FALSE)
 ```
 
+# Fixed-sample matched-distance validation of filtering effects
+
+This analysis directly tests whether filtering reduces dissimilarity among the
+five sampling systems within the same participant and anatomical site. All 50
+biological samples are retained for every filtering condition, so changes in
+distance cannot be attributed to sample exclusion at the rarefaction step.
+Distances between participants and between anatomical sites are calculated in
+parallel to determine whether filtering simply compresses all biological
+variation.
+
+```{r fixed-sample-matched-distances}
+filter_distance_objects <- lapply(filter_objects, function(ps) {
+  stopifnot(setequal(sample_names(ps), sample_names(filter_base)))
+  stopifnot(all(sample_sums(ps) > 0))
+  transform_sample_counts(ps, function(x) x / sum(x)) %>% prune_nonzero()
+})
+
+extract_matched_distance_units <- function(ps, condition_id, distance_name,
+                                           distance_method) {
+  dist_obj <- phyloseq::distance(ps, method = distance_method)
+  dist_mat <- as.matrix(dist_obj)
+  md <- data.frame(sample_data(ps), check.names = FALSE) %>%
+    rownames_to_column("sample_name")
+  pairs <- which(upper.tri(dist_mat), arr.ind = TRUE)
+
+  pair_df <- tibble(
+    sample_1 = rownames(dist_mat)[pairs[, 1]],
+    sample_2 = colnames(dist_mat)[pairs[, 2]],
+    distance_value = dist_mat[pairs]
+  ) %>%
+    left_join(
+      md %>% select(sample_1 = sample_name,
+                    subject_1 = subject_id, site_1 = site_group,
+                    system_1 = swab_type2),
+      by = "sample_1"
+    ) %>%
+    left_join(
+      md %>% select(sample_2 = sample_name,
+                    subject_2 = subject_id, site_2 = site_group,
+                    system_2 = swab_type2),
+      by = "sample_2"
+    ) %>%
+    mutate(
+      pair_class = case_when(
+        subject_1 == subject_2 & site_1 == site_2 & system_1 != system_2 ~
+          "within_participant_site_between_systems",
+        subject_1 != subject_2 & site_1 == site_2 & system_1 == system_2 ~
+          "between_participants_matched_site_system",
+        subject_1 == subject_2 & site_1 != site_2 & system_1 == system_2 ~
+          "between_sites_matched_participant_system",
+        TRUE ~ NA_character_
+      ),
+      unit_id = case_when(
+        pair_class == "within_participant_site_between_systems" ~
+          paste(subject_1, site_1, sep = "__"),
+        pair_class == "between_participants_matched_site_system" ~
+          paste(site_1, system_1, sep = "__"),
+        pair_class == "between_sites_matched_participant_system" ~
+          paste(subject_1, system_1, sep = "__"),
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    filter(!is.na(pair_class)) %>%
+    group_by(pair_class, unit_id) %>%
+    summarise(
+      unit_median_distance = median(distance_value),
+      pair_count = n(),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      condition_axis = "filter_at_threshold_0.5_fixed_50_samples",
+      condition_id = condition_id,
+      distance = distance_name,
+      .before = 1
+    )
+  pair_df
+}
+
+fixed_sample_distance_units <- bind_rows(lapply(names(filter_distance_objects), function(id) {
+  bind_rows(lapply(names(distance_methods), function(distance_name) {
+    extract_matched_distance_units(
+      filter_distance_objects[[id]], id, distance_name,
+      distance_methods[[distance_name]]
+    )
+  }))
+}))
+
+baseline_units <- fixed_sample_distance_units %>%
+  filter(condition_id == "no_filter") %>%
+  select(distance, pair_class, unit_id,
+         baseline_distance = unit_median_distance)
+
+fixed_sample_distance_units <- fixed_sample_distance_units %>%
+  left_join(baseline_units, by = c("distance", "pair_class", "unit_id")) %>%
+  mutate(
+    absolute_change_from_no_filter = unit_median_distance - baseline_distance,
+    percent_change_from_no_filter = ifelse(
+      baseline_distance > 0,
+      100 * absolute_change_from_no_filter / baseline_distance,
+      NA_real_
+    )
+  )
+
+fixed_sample_distance_summary <- fixed_sample_distance_units %>%
+  group_by(condition_id, distance, pair_class) %>%
+  summarise(
+    n_units = n(),
+    median_distance = median(unit_median_distance),
+    IQR_distance = IQR(unit_median_distance),
+    median_absolute_change = median(absolute_change_from_no_filter),
+    median_percent_change = median(percent_change_from_no_filter, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+paired_filter_tests <- fixed_sample_distance_units %>%
+  filter(condition_id != "no_filter") %>%
+  group_by(condition_id, distance, pair_class) %>%
+  group_modify(~{
+    fit <- tryCatch(
+      wilcox.test(
+        .x$unit_median_distance,
+        .x$baseline_distance,
+        paired = TRUE,
+        alternative = "two.sided",
+        exact = FALSE
+      ),
+      error = function(e) NULL
+    )
+    tibble(
+      n_units = nrow(.x),
+      median_change = median(.x$absolute_change_from_no_filter),
+      median_percent_change = median(.x$percent_change_from_no_filter, na.rm = TRUE),
+      statistic = if (is.null(fit)) NA_real_ else unname(fit$statistic),
+      p_value = if (is.null(fit)) NA_real_ else fit$p.value
+    )
+  }) %>%
+  ungroup() %>%
+  group_by(distance, pair_class) %>%
+  mutate(
+    p_adjusted_bonferroni = p.adjust(p_value, method = "bonferroni"),
+    p_adjusted_BH = p.adjust(p_value, method = "BH")
+  ) %>%
+  ungroup()
+
+distance_signal_ratios <- fixed_sample_distance_summary %>%
+  select(condition_id, distance, pair_class, median_distance) %>%
+  pivot_wider(names_from = pair_class, values_from = median_distance) %>%
+  mutate(
+    participant_to_system_ratio =
+      between_participants_matched_site_system /
+      within_participant_site_between_systems,
+    site_to_system_ratio =
+      between_sites_matched_participant_system /
+      within_participant_site_between_systems
+  ) %>%
+  group_by(distance) %>%
+  mutate(
+    participant_ratio_retained_pct = 100 * participant_to_system_ratio /
+      participant_to_system_ratio[condition_id == "no_filter"],
+    site_ratio_retained_pct = 100 * site_to_system_ratio /
+      site_to_system_ratio[condition_id == "no_filter"]
+  ) %>%
+  ungroup()
+
+write.csv(
+  fixed_sample_distance_units,
+  file.path(tab_dir, "Table17_fixed50_matched_distance_units.csv"),
+  row.names = FALSE
+)
+write.csv(
+  fixed_sample_distance_summary,
+  file.path(tab_dir, "Table18_fixed50_matched_distance_summary.csv"),
+  row.names = FALSE
+)
+write.csv(
+  paired_filter_tests,
+  file.path(tab_dir, "Table19_fixed50_paired_filter_tests.csv"),
+  row.names = FALSE
+)
+write.csv(
+  distance_signal_ratios,
+  file.path(tab_dir, "Table20_fixed50_signal_ratios.csv"),
+  row.names = FALSE
+)
+```
+
 # Taxa removed at threshold 0.5
 
 ```{r removed-taxa}
@@ -1034,6 +1220,90 @@ ggsave(file.path(fig_dir, "Figure6_shared_genus_read_fraction.png"),
        p_shared, width = 11, height = 5, dpi = 600)
 ggsave(file.path(fig_dir, "Figure6_shared_genus_read_fraction.tiff"),
        p_shared, width = 11, height = 5, dpi = 600, compression = "lzw")
+
+filter_display_levels <- names(filter_objects)
+pair_class_labels <- c(
+  within_participant_site_between_systems = "Between systems\nwithin participant-site",
+  between_participants_matched_site_system = "Between participants\nmatched by site-system",
+  between_sites_matched_participant_system = "Between sites\nmatched by participant-system"
+)
+
+p_fixed_change <- fixed_sample_distance_summary %>%
+  filter(condition_id != "no_filter") %>%
+  mutate(
+    condition_id = factor(condition_id, levels = filter_display_levels),
+    pair_class = recode(pair_class, !!!pair_class_labels),
+    distance = recode(
+      distance,
+      weighted_unifrac = "Weighted UniFrac",
+      unweighted_unifrac = "Unweighted UniFrac",
+      bray_curtis = "Bray-Curtis"
+    )
+  ) %>%
+  ggplot(aes(condition_id, median_percent_change, colour = pair_class,
+             group = pair_class)) +
+  geom_hline(yintercept = 0, linetype = 2, colour = "grey50") +
+  geom_line() + geom_point(size = 2) +
+  facet_wrap(~distance, scales = "free_y") +
+  scale_colour_brewer(palette = "Dark2") +
+  labs(
+    x = "Filter at decontam threshold 0.5",
+    y = "Median distance change from no filter (%)",
+    colour = NULL
+  ) +
+  theme_bw(base_size = 9) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"
+  )
+
+ggsave(file.path(fig_dir, "Figure7_fixed50_matched_distance_change.png"),
+       p_fixed_change, width = 12, height = 6, dpi = 600)
+ggsave(file.path(fig_dir, "Figure7_fixed50_matched_distance_change.tiff"),
+       p_fixed_change, width = 12, height = 6, dpi = 600, compression = "lzw")
+
+p_signal_ratio <- distance_signal_ratios %>%
+  select(condition_id, distance,
+         participant_to_system_ratio, site_to_system_ratio) %>%
+  pivot_longer(
+    cols = c(participant_to_system_ratio, site_to_system_ratio),
+    names_to = "signal",
+    values_to = "signal_to_system_ratio"
+  ) %>%
+  mutate(
+    condition_id = factor(condition_id, levels = filter_display_levels),
+    signal = recode(
+      signal,
+      participant_to_system_ratio = "Participant/system-distance ratio",
+      site_to_system_ratio = "Site/system-distance ratio"
+    ),
+    distance = recode(
+      distance,
+      weighted_unifrac = "Weighted UniFrac",
+      unweighted_unifrac = "Unweighted UniFrac",
+      bray_curtis = "Bray-Curtis"
+    )
+  ) %>%
+  ggplot(aes(condition_id, signal_to_system_ratio, colour = signal,
+             group = signal)) +
+  geom_line() + geom_point(size = 2) +
+  facet_wrap(~distance, scales = "free_y") +
+  scale_colour_brewer(palette = "Set1") +
+  labs(
+    x = "Filter at decontam threshold 0.5",
+    y = "Biological-signal / within-block system-distance ratio",
+    colour = NULL
+  ) +
+  theme_bw(base_size = 9) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"
+  )
+
+ggsave(file.path(fig_dir, "Figure8_fixed50_signal_preservation_ratio.png"),
+       p_signal_ratio, width = 12, height = 6, dpi = 600)
+ggsave(file.path(fig_dir, "Figure8_fixed50_signal_preservation_ratio.tiff"),
+       p_signal_ratio, width = 12, height = 6, dpi = 600, compression = "lzw")
 ```
 
 # Reproducibility record
@@ -1048,7 +1318,9 @@ final_checks <- bind_rows(
       "all PROTEST permutation runs record 9999 permutations",
       "no tree transformation function used in analysis",
       "threshold axis contains None plus 0.1-0.9",
-      "filter axis contains all nine prespecified filters"
+      "filter axis contains all nine prespecified filters",
+      "fixed-sample filtering comparison retains the same 50 samples",
+      "fixed-sample matched-distance units have expected block counts"
     ),
     passed = c(
       all(permanova_all$permutations == permutations_n),
@@ -1056,7 +1328,20 @@ final_checks <- bind_rows(
       all(procrustes_results$permutations == permutations_n),
       identical(phy_tree(phy_pre), original_tree),
       setequal(names(threshold_objects), threshold_labels),
-      setequal(names(filter_objects), filter_ids)
+      setequal(names(filter_objects), filter_ids),
+      all(vapply(filter_distance_objects, nsamples, integer(1)) == 50L),
+      all(
+        fixed_sample_distance_units %>%
+          distinct(condition_id, distance, pair_class, unit_id) %>%
+          count(condition_id, distance, pair_class) %>%
+          mutate(expected = case_when(
+            pair_class == "within_participant_site_between_systems" ~ 10L,
+            pair_class == "between_participants_matched_site_system" ~ 10L,
+            pair_class == "between_sites_matched_participant_system" ~ 25L
+          )) %>%
+          transmute(ok = n == expected) %>%
+          pull(ok)
+      )
     )
   )
 )
@@ -1073,6 +1358,8 @@ writeLines(
     "Existing phylogenetic tree used without modification",
     "Threshold axis: no decontam and prevalence thresholds 0.1-0.9 with singleton removal",
     "Filter axis: nine filters at decontam threshold 0.5",
+    "Fixed-sample distance validation: the same 50 samples under every filter",
+    "Paired units: participant-site, site-system, and participant-system blocks",
     "Rarefaction depth: 5876",
     "Permutation tests: 9999",
     "Random seed: 42",
