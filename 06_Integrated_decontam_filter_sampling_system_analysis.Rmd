@@ -1,0 +1,1097 @@
+---
+title: "Integrated decontam, filtering, and sampling-system sensitivity analysis"
+author: "DT Swab Study"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+project_library <- file.path(getwd(), "R_library")
+if (dir.exists(project_library)) .libPaths(c(project_library, .libPaths()))
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Objective
+
+The primary study question remains the comparison of five integrated swab-medium
+sampling systems. This analysis tests whether that conclusion changes when
+prevalence-based decontamination and rare-feature filtering decisions are varied.
+
+Two prespecified sensitivity axes are evaluated:
+
+1. No decontamination and decontam prevalence thresholds 0.1--0.9, with singleton
+   removal applied to every condition.
+2. Nine rare-feature filters at the selected decontam threshold 0.5.
+
+The phylogenetic tree stored in the existing phyloseq objects is used without
+modification. No rerooting, polytomy resolution, or branch-length transformation is
+performed. All permutation tests use 9,999 permutations and random seed 42.
+
+```{r packages}
+suppressPackageStartupMessages({
+  library(phyloseq)
+  library(decontam)
+  library(vegan)
+  library(permute)
+  library(dplyr)
+  library(tidyr)
+  library(tibble)
+  library(ggplot2)
+  library(patchwork)
+  library(RColorBrewer)
+})
+
+set.seed(42)
+permutations_n <- 9999L
+target_depth <- 5876L
+
+out_dir <- file.path(getwd(), "Integrated_sensitivity_output")
+fig_dir <- file.path(out_dir, "Figures")
+tab_dir <- file.path(out_dir, "Tables")
+dir.create(fig_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(tab_dir, recursive = TRUE, showWarnings = FALSE)
+
+distance_methods <- c(
+  weighted_unifrac = "wunifrac",
+  unweighted_unifrac = "unifrac",
+  bray_curtis = "bray"
+)
+
+thresholds <- seq(0.1, 0.9, by = 0.1)
+threshold_labels <- c("None", sprintf("%0.1f", thresholds))
+
+filter_ids <- c(
+  "no_filter",
+  "remove_count_le_1",
+  "remove_count_le_2",
+  "remove_count_le_10",
+  "prevalence_ge_2",
+  "prevalence_ge_5",
+  "prevalence_ge_10pct",
+  "mean_abundance_ge_0.1pct",
+  "mean_abundance_ge_1pct"
+)
+
+filter_labels <- c(
+  no_filter = "No additional filter",
+  remove_count_le_1 = "Singleton removal",
+  remove_count_le_2 = "Remove total count <=2",
+  remove_count_le_10 = "Remove total count <=10",
+  prevalence_ge_2 = "Prevalence >=2 samples",
+  prevalence_ge_5 = "Prevalence >=5 samples",
+  prevalence_ge_10pct = "Prevalence >=10% samples",
+  `mean_abundance_ge_0.1pct` = "Mean abundance >=0.1%",
+  `mean_abundance_ge_1pct` = "Mean abundance >=1%"
+)
+
+otu_matrix <- function(ps) {
+  otu <- as(otu_table(ps), "matrix")
+  if (!taxa_are_rows(ps)) otu <- t(otu)
+  otu
+}
+
+prune_nonzero <- function(ps) {
+  prune_taxa(taxa_sums(ps) > 0, ps)
+}
+```
+
+# Reconstruct the original decontam conditions
+
+```{r reconstruct-decontam}
+phy_pre <- readRDS("Phyloseq/phy_F270R240_260812_v3.rds")
+original_tree <- phy_tree(phy_pre)
+
+# Restore control labels from the original metadata by exact sample ID. The five
+# controls are recorded as negative-control in the metadata and were converted to
+# control in the original preprocessing workflow before decontam was run.
+metadata_source <- read.delim(
+  "metadata/DT_metadata.tsv",
+  check.names = FALSE,
+  stringsAsFactors = FALSE
+)
+rownames(metadata_source) <- metadata_source$sample_id
+stopifnot(all(sample_names(phy_pre) %in% rownames(metadata_source)))
+metadata_source <- metadata_source[sample_names(phy_pre), , drop = FALSE]
+metadata_source$control_status <- ifelse(
+  metadata_source$control_status == "negative-control",
+  "control",
+  metadata_source$control_status
+)
+stopifnot(
+  sum(metadata_source$control_status == "sample") == 50L,
+  sum(metadata_source$control_status == "control") == 5L
+)
+sample_data(phy_pre) <- sample_data(metadata_source)
+sample_data(phy_pre)$is.neg <- sample_data(phy_pre)$control_status == "control"
+
+decontam_calls <- setNames(
+  lapply(thresholds, function(threshold) {
+    isContaminant(
+      phy_pre,
+      method = "prevalence",
+      neg = "is.neg",
+      threshold = threshold
+    )
+  }),
+  sprintf("%0.1f", thresholds)
+)
+
+make_clean_all <- function(threshold_label) {
+  if (threshold_label == "None") return(phy_pre)
+  calls <- decontam_calls[[threshold_label]]
+  prune_taxa(!calls$contaminant, phy_pre)
+}
+
+clean_all_objects <- setNames(
+  lapply(threshold_labels, make_clean_all),
+  threshold_labels
+)
+
+true_no_filter_objects <- lapply(clean_all_objects, function(ps) {
+  ps <- subset_samples(ps, control_status == "sample")
+  prune_nonzero(ps)
+})
+
+control_objects <- lapply(clean_all_objects, function(ps) {
+  ps <- subset_samples(ps, control_status == "control")
+  prune_nonzero(ps)
+})
+
+# The threshold axis uses the same singleton definition in every condition.
+threshold_objects <- lapply(true_no_filter_objects, function(ps) {
+  prune_taxa(taxa_sums(ps) > 1, ps) %>% prune_nonzero()
+})
+
+apply_feature_filter <- function(ps, filter_id) {
+  otu <- otu_matrix(ps)
+  total_count <- rowSums(otu)
+  prevalence <- rowSums(otu > 0)
+  rel <- sweep(otu, 2, colSums(otu), "/")
+  rel[!is.finite(rel)] <- 0
+  mean_rel_pct <- rowMeans(rel) * 100
+
+  keep <- switch(
+    filter_id,
+    no_filter = total_count > 0,
+    remove_count_le_1 = total_count > 1,
+    remove_count_le_2 = total_count > 2,
+    remove_count_le_10 = total_count > 10,
+    prevalence_ge_2 = prevalence >= 2,
+    prevalence_ge_5 = prevalence >= 5,
+    prevalence_ge_10pct = prevalence >= ceiling(0.10 * nsamples(ps)),
+    `mean_abundance_ge_0.1pct` = mean_rel_pct >= 0.1,
+    `mean_abundance_ge_1pct` = mean_rel_pct >= 1,
+    stop("Unknown filter: ", filter_id)
+  )
+  prune_taxa(keep, ps) %>% prune_nonzero()
+}
+
+filter_base <- true_no_filter_objects[["0.5"]]
+filter_objects <- setNames(
+  lapply(filter_ids, function(filter_id) {
+    apply_feature_filter(filter_base, filter_id)
+  }),
+  filter_ids
+)
+```
+
+# Validation of reconstruction and tree preservation
+
+```{r reconstruction-validation}
+phy_v4 <- readRDS("Phyloseq/phy_F270R240_260812_v4.rds")
+phy_v4_true <- subset_samples(phy_v4, control_status == "sample") %>% prune_nonzero()
+reconstructed_v05 <- true_no_filter_objects[["0.5"]]
+
+validation <- tibble(
+  check = c(
+    "50 true and five control samples restored",
+    "threshold 0.5 ASV count matches saved v4",
+    "threshold 0.5 true-sample reads match saved v4",
+    "threshold 0.5 ASV identities match saved v4",
+    "preprocessing tree object was not modified",
+    "prevalence >=10% equals prevalence >=5 at n=50"
+  ),
+  passed = c(
+    sum(sample_data(phy_pre)$control_status == "sample") == 50L &&
+      sum(sample_data(phy_pre)$control_status == "control") == 5L,
+    ntaxa(reconstructed_v05) == ntaxa(phy_v4_true),
+    sum(sample_sums(reconstructed_v05)) == sum(sample_sums(phy_v4_true)),
+    setequal(taxa_names(reconstructed_v05), taxa_names(phy_v4_true)),
+    identical(phy_tree(phy_pre), original_tree),
+    setequal(
+      taxa_names(filter_objects[["prevalence_ge_10pct"]]),
+      taxa_names(filter_objects[["prevalence_ge_5"]])
+    )
+  ),
+  observed = c(
+    paste(sum(sample_data(phy_pre)$control_status == "sample"),
+          sum(sample_data(phy_pre)$control_status == "control"), sep = " / "),
+    paste(ntaxa(reconstructed_v05), ntaxa(phy_v4_true), sep = " vs "),
+    paste(sum(sample_sums(reconstructed_v05)), sum(sample_sums(phy_v4_true)), sep = " vs "),
+    as.character(setequal(taxa_names(reconstructed_v05), taxa_names(phy_v4_true))),
+    as.character(identical(phy_tree(phy_pre), original_tree)),
+    as.character(setequal(
+      taxa_names(filter_objects[["prevalence_ge_10pct"]]),
+      taxa_names(filter_objects[["prevalence_ge_5"]])
+    ))
+  )
+)
+write.csv(validation, file.path(tab_dir, "Table00_validation_sanity_checks.csv"), row.names = FALSE)
+if (!all(validation$passed)) stop("Integrated analysis reconstruction failed")
+validation
+```
+
+# Data retention and sample-level read removal
+
+```{r retention-removal}
+pre_true <- true_no_filter_objects[["None"]]
+pre_control <- control_objects[["None"]]
+pre_true_reads <- sum(sample_sums(pre_true))
+pre_control_reads <- sum(sample_sums(pre_control))
+
+threshold_retention <- bind_rows(lapply(threshold_labels, function(label) {
+  true_ps <- true_no_filter_objects[[label]]
+  threshold_ps <- threshold_objects[[label]]
+  ctrl_ps <- control_objects[[label]]
+  tibble(
+    threshold = label,
+    threshold_numeric = ifelse(label == "None", 0, as.numeric(label)),
+    contaminant_asvs = ifelse(
+      label == "None", 0L, sum(decontam_calls[[label]]$contaminant)
+    ),
+    true_asvs_before_singleton = ntaxa(true_ps),
+    true_asvs_after_singleton = ntaxa(threshold_ps),
+    true_reads = sum(sample_sums(true_ps)),
+    true_reads_retained_pct = 100 * sum(sample_sums(true_ps)) / pre_true_reads,
+    control_reads = sum(sample_sums(ctrl_ps)),
+    control_reads_retained_pct = 100 * sum(sample_sums(ctrl_ps)) / pre_control_reads,
+    samples_below_5876 = sum(sample_sums(threshold_ps) < target_depth),
+    samples_available_at_5876 = sum(sample_sums(threshold_ps) >= target_depth),
+    minimum_true_sample_depth = min(sample_sums(threshold_ps))
+  )
+}))
+
+filter_retention <- bind_rows(lapply(filter_ids, function(filter_id) {
+  ps <- filter_objects[[filter_id]]
+  tibble(
+    filter_id = filter_id,
+    filter = unname(filter_labels[filter_id]),
+    retained_asvs = ntaxa(ps),
+    retained_reads = sum(sample_sums(ps)),
+    reads_retained_vs_v05_pct = 100 * sum(sample_sums(ps)) / sum(sample_sums(filter_base)),
+    samples_below_5876 = sum(sample_sums(ps) < target_depth),
+    samples_available_at_5876 = sum(sample_sums(ps) >= target_depth),
+    minimum_depth = min(sample_sums(ps))
+  )
+}))
+
+pre_sample_reads <- sample_sums(phy_pre)
+sample_removal <- bind_rows(lapply(threshold_labels, function(label) {
+  post_reads <- sample_sums(clean_all_objects[[label]])
+  md <- data.frame(sample_data(phy_pre), check.names = FALSE)
+  tibble(
+    sample_name = names(pre_sample_reads),
+    threshold = label,
+    threshold_numeric = ifelse(label == "None", 0, as.numeric(label)),
+    reads_before = as.numeric(pre_sample_reads),
+    reads_after = as.numeric(post_reads[names(pre_sample_reads)]),
+    reads_removed = reads_before - reads_after,
+    removed_pct = 100 * reads_removed / reads_before,
+    subject_id = as.character(md[names(pre_sample_reads), "subject_id"]),
+    site_group = as.character(md[names(pre_sample_reads), "site_group"]),
+    swab_type2 = as.character(md[names(pre_sample_reads), "swab_type2"]),
+    control_status = as.character(md[names(pre_sample_reads), "control_status"])
+  )
+}))
+
+write.csv(threshold_retention, file.path(tab_dir, "Table01_decontam_threshold_retention.csv"), row.names = FALSE)
+write.csv(filter_retention, file.path(tab_dir, "Table02_filter_retention_at_threshold_0.5.csv"), row.names = FALSE)
+write.csv(sample_removal, file.path(tab_dir, "Table03_sample_level_read_removal.csv"), row.names = FALSE)
+```
+
+# Repeated-measures comparison of removal by sampling system
+
+```{r removal-repeated-measures}
+run_removal_friedman <- function(threshold_label, site) {
+  dat <- sample_removal %>%
+    filter(
+      threshold == threshold_label,
+      control_status == "sample",
+      site_group == site
+    )
+  fit <- tryCatch(
+    friedman.test(
+      y = dat$removed_pct,
+      groups = dat$swab_type2,
+      blocks = dat$subject_id
+    ),
+    error = function(e) NULL
+  )
+  tibble(
+    threshold = threshold_label,
+    site_group = site,
+    n_participants = n_distinct(dat$subject_id),
+    n_systems = n_distinct(dat$swab_type2),
+    statistic = if (is.null(fit)) NA_real_ else unname(fit$statistic),
+    df = if (is.null(fit)) NA_real_ else unname(fit$parameter),
+    p_value = if (is.null(fit)) NA_real_ else fit$p.value,
+    test = "Friedman repeated-measures omnibus test"
+  )
+}
+
+removal_friedman <- bind_rows(lapply(sprintf("%0.1f", thresholds), function(label) {
+  bind_rows(lapply(c("Antecubital", "Forehead"), function(site) {
+    run_removal_friedman(label, site)
+  }))
+})) %>%
+  group_by(site_group) %>%
+  mutate(
+    p_adjusted_BH = p.adjust(p_value, method = "BH"),
+    p_adjusted_bonferroni = p.adjust(p_value, method = "bonferroni")
+  ) %>%
+  ungroup()
+
+write.csv(removal_friedman, file.path(tab_dir, "Table04_sampling_system_read_removal_Friedman.csv"), row.names = FALSE)
+```
+
+# Rarefaction and community statistics
+
+```{r community-functions}
+rarefy_at_target <- function(ps) {
+  keep <- sample_names(ps)[sample_sums(ps) >= target_depth]
+  if (length(keep) < 2L) return(NULL)
+  ps <- prune_samples(keep, ps) %>% prune_nonzero()
+  set.seed(42)
+  rarefy_even_depth(
+    ps,
+    sample.size = target_depth,
+    rngseed = 42,
+    replace = FALSE,
+    trimOTUs = TRUE,
+    verbose = FALSE
+  )
+}
+
+threshold_rarefied <- lapply(threshold_objects, rarefy_at_target)
+filter_rarefied <- lapply(filter_objects, rarefy_at_target)
+
+run_permanova <- function(ps, condition_axis, condition_id, distance_name,
+                          distance_method, variable) {
+  if (is.null(ps)) return(tibble())
+  dist_obj <- phyloseq::distance(ps, method = distance_method)
+  md <- data.frame(sample_data(ps), check.names = FALSE)
+  model_formula <- as.formula(paste("dist_obj ~", variable))
+  blocked <- variable != "subject_id"
+  set.seed(42)
+  fit <- if (blocked) {
+    adonis2(model_formula, data = md, permutations = permutations_n,
+            strata = md$subject_id)
+  } else {
+    adonis2(model_formula, data = md, permutations = permutations_n)
+  }
+  tibble(
+    condition_axis = condition_axis,
+    condition_id = condition_id,
+    distance = distance_name,
+    variable = variable,
+    n_samples = nrow(md),
+    n_participants = n_distinct(md$subject_id),
+    df = fit$Df[1],
+    pseudo_F = fit$F[1],
+    R2 = fit$R2[1],
+    p_value = fit$`Pr(>F)`[1],
+    permutations = permutations_n,
+    permutation_scheme = ifelse(blocked, "restricted within participant", "unrestricted")
+  )
+}
+
+run_permdisp <- function(ps, condition_axis, condition_id, distance_name,
+                         distance_method) {
+  if (is.null(ps)) return(tibble())
+  dist_obj <- phyloseq::distance(ps, method = distance_method)
+  md <- data.frame(sample_data(ps), check.names = FALSE)
+  dispersion <- betadisper(dist_obj, md$swab_type2, type = "median", bias.adjust = TRUE)
+  design <- permute::how(nperm = permutations_n, blocks = md$subject_id)
+  set.seed(42)
+  fit <- permutest(dispersion, permutations = design)
+  tibble(
+    condition_axis = condition_axis,
+    condition_id = condition_id,
+    distance = distance_name,
+    n_samples = nrow(md),
+    F = fit$tab$F[1],
+    p_value = fit$tab$`Pr(>F)`[1],
+    permutations = permutations_n,
+    permutation_scheme = "restricted within participant"
+  )
+}
+
+run_condition_statistics <- function(object_list, condition_axis) {
+  permanova <- bind_rows(lapply(names(object_list), function(condition_id) {
+    ps <- object_list[[condition_id]]
+    bind_rows(lapply(names(distance_methods), function(distance_name) {
+      bind_rows(lapply(c("subject_id", "site_group", "swab_type2"), function(variable) {
+        run_permanova(
+          ps, condition_axis, condition_id,
+          distance_name, distance_methods[[distance_name]], variable
+        )
+      }))
+    }))
+  }))
+
+  permdisp <- bind_rows(lapply(names(object_list), function(condition_id) {
+    ps <- object_list[[condition_id]]
+    bind_rows(lapply(names(distance_methods), function(distance_name) {
+      run_permdisp(
+        ps, condition_axis, condition_id,
+        distance_name, distance_methods[[distance_name]]
+      )
+    }))
+  }))
+  list(permanova = permanova, permdisp = permdisp)
+}
+
+threshold_statistics <- run_condition_statistics(threshold_rarefied, "decontam_threshold")
+filter_statistics <- run_condition_statistics(filter_rarefied, "filter_at_threshold_0.5")
+
+permanova_all <- bind_rows(
+  threshold_statistics$permanova,
+  filter_statistics$permanova
+)
+permdisp_all <- bind_rows(
+  threshold_statistics$permdisp,
+  filter_statistics$permdisp
+)
+
+write.csv(permanova_all, file.path(tab_dir, "Table05_PERMANOVA_all_conditions.csv"), row.names = FALSE)
+write.csv(permdisp_all, file.path(tab_dir, "Table06_PERMDISP_all_conditions.csv"), row.names = FALSE)
+```
+
+# Alpha diversity with repeated-measures omnibus tests
+
+```{r alpha-diversity}
+run_alpha_friedman <- function(ps, condition_axis, condition_id) {
+  if (is.null(ps)) return(tibble())
+  md <- data.frame(sample_data(ps), check.names = FALSE) %>%
+    rownames_to_column("sample_name") %>%
+    mutate(sample_name = sub("^X", "", sample_name))
+  alpha <- estimate_richness(ps, measures = c("Shannon", "Observed")) %>%
+    rownames_to_column("sample_name") %>%
+    mutate(sample_name = sub("^X", "", sample_name)) %>%
+    left_join(md, by = "sample_name")
+
+  bind_rows(lapply(unique(as.character(alpha$site_group)), function(site) {
+    bind_rows(lapply(c("Shannon", "Observed"), function(response) {
+      dat <- alpha %>% filter(site_group == site)
+      complete_design <- nrow(dat) == 25L &&
+        n_distinct(dat$subject_id) == 5L &&
+        n_distinct(dat$swab_type2) == 5L
+      fit <- if (complete_design) {
+        friedman.test(
+          y = dat[[response]],
+          groups = dat$swab_type2,
+          blocks = dat$subject_id
+        )
+      } else NULL
+      tibble(
+        condition_axis = condition_axis,
+        condition_id = condition_id,
+        site_group = site,
+        response = response,
+        n_samples = nrow(dat),
+        n_participants = n_distinct(dat$subject_id),
+        statistic = if (is.null(fit)) NA_real_ else unname(fit$statistic),
+        df = if (is.null(fit)) NA_real_ else unname(fit$parameter),
+        p_value = if (is.null(fit)) NA_real_ else fit$p.value,
+        complete_5_by_5_design = complete_design
+      )
+    }))
+  }))
+}
+
+alpha_results <- bind_rows(
+  bind_rows(lapply(names(threshold_rarefied), function(id) {
+    run_alpha_friedman(threshold_rarefied[[id]], "decontam_threshold", id)
+  })),
+  bind_rows(lapply(names(filter_rarefied), function(id) {
+    run_alpha_friedman(filter_rarefied[[id]], "filter_at_threshold_0.5", id)
+  }))
+)
+
+write.csv(alpha_results, file.path(tab_dir, "Table07_alpha_diversity_Friedman.csv"), row.names = FALSE)
+```
+
+# Composition similarity, shared features, and matched-block agreement
+
+```{r composition-sharing-functions}
+composition_similarity <- function(reference, candidate) {
+  shared_samples <- intersect(sample_names(reference), sample_names(candidate))
+  ref <- prune_samples(shared_samples, reference)
+  cand <- prune_samples(shared_samples, candidate)
+  all_taxa <- union(taxa_names(ref), taxa_names(cand))
+
+  aligned_relative <- function(ps) {
+    otu <- otu_matrix(ps)
+    aligned <- matrix(
+      0,
+      nrow = length(all_taxa),
+      ncol = length(shared_samples),
+      dimnames = list(all_taxa, shared_samples)
+    )
+    aligned[rownames(otu), colnames(otu)] <- otu
+    rel <- sweep(aligned, 2, colSums(aligned), "/")
+    rel[!is.finite(rel)] <- 0
+    rel
+  }
+
+  ref_rel <- aligned_relative(ref)
+  cand_rel <- aligned_relative(cand)
+  tibble(
+    sample_name = shared_samples,
+    similarity = vapply(shared_samples, function(sample_name) {
+      1 - sum(abs(ref_rel[, sample_name] - cand_rel[, sample_name])) / 2
+    }, numeric(1))
+  )
+}
+
+prepare_rank_object <- function(ps, rank_name) {
+  if (rank_name == "ASV") return(ps)
+  tax <- as(tax_table(ps), "matrix")
+  genus <- as.character(tax[, "Genus"])
+  genus[is.na(genus) | genus == ""] <- "Unclassified_genus"
+  tax[, "Genus"] <- genus
+  tax_table(ps) <- tax_table(tax)
+  tax_glom(ps, taxrank = "Genus", NArm = FALSE)
+}
+
+aggregate_shared_summary <- function(ps, rank_name) {
+  work <- prepare_rank_object(ps, rank_name)
+  otu <- otu_matrix(work)
+  md <- data.frame(sample_data(work), check.names = FALSE)
+  systems <- sort(unique(as.character(md$swab_type2)))
+  present <- sapply(systems, function(system) {
+    samples <- rownames(md)[md$swab_type2 == system]
+    rowSums(otu[, samples, drop = FALSE]) > 0
+  })
+  shared <- rownames(otu)[rowSums(present) == length(systems)]
+  exclusive <- rownames(otu)[rowSums(present) == 1L]
+  tibble(
+    taxonomic_level = rank_name,
+    total_features = nrow(otu),
+    shared_all_systems_features = length(shared),
+    shared_all_systems_read_pct = 100 * sum(otu[shared, , drop = FALSE]) / sum(otu),
+    system_exclusive_features = length(exclusive),
+    system_exclusive_read_pct = 100 * sum(otu[exclusive, , drop = FALSE]) / sum(otu)
+  )
+}
+
+matched_block_summary <- function(ps, rank_name) {
+  work <- prepare_rank_object(ps, rank_name)
+  otu <- otu_matrix(work)
+  md <- data.frame(sample_data(work), check.names = FALSE)
+  blocks <- md %>% rownames_to_column("sample_name") %>%
+    distinct(subject_id, site_group)
+
+  bind_rows(lapply(seq_len(nrow(blocks)), function(i) {
+    block_md <- md[
+      md$subject_id == blocks$subject_id[i] &
+        md$site_group == blocks$site_group[i],
+      , drop = FALSE
+    ]
+    samples <- rownames(block_md)
+    block_otu <- otu[, samples, drop = FALSE]
+    present <- block_otu > 0
+    shared <- rownames(block_otu)[rowSums(present) == ncol(block_otu)]
+    union_ids <- rownames(block_otu)[rowSums(present) > 0]
+    tibble(
+      taxonomic_level = rank_name,
+      subject_id = blocks$subject_id[i],
+      site_group = blocks$site_group[i],
+      systems_present = n_distinct(block_md$swab_type2),
+      union_features = length(union_ids),
+      shared_all_five_features = length(shared),
+      intersection_over_union = length(shared) / length(union_ids),
+      shared_all_five_read_pct = 100 * sum(block_otu[shared, , drop = FALSE]) / sum(block_otu)
+    )
+  }))
+}
+
+summarise_condition_composition <- function(object_list, condition_axis, reference) {
+  similarity <- bind_rows(lapply(names(object_list), function(id) {
+    composition_similarity(reference, object_list[[id]]) %>%
+      summarise(
+        mean_similarity = mean(similarity),
+        median_similarity = median(similarity),
+        minimum_similarity = min(similarity)
+      ) %>%
+      mutate(condition_axis = condition_axis, condition_id = id, .before = 1)
+  }))
+
+  aggregate <- bind_rows(lapply(names(object_list), function(id) {
+    bind_rows(
+      aggregate_shared_summary(object_list[[id]], "ASV"),
+      aggregate_shared_summary(object_list[[id]], "Genus")
+    ) %>% mutate(condition_axis = condition_axis, condition_id = id, .before = 1)
+  }))
+
+  matched <- bind_rows(lapply(names(object_list), function(id) {
+    bind_rows(
+      matched_block_summary(object_list[[id]], "ASV"),
+      matched_block_summary(object_list[[id]], "Genus")
+    ) %>% mutate(condition_axis = condition_axis, condition_id = id, .before = 1)
+  }))
+
+  list(similarity = similarity, aggregate = aggregate, matched = matched)
+}
+
+reference_object <- threshold_objects[["None"]]
+threshold_composition <- summarise_condition_composition(
+  threshold_objects, "decontam_threshold", reference_object
+)
+filter_composition <- summarise_condition_composition(
+  filter_objects, "filter_at_threshold_0.5", reference_object
+)
+
+composition_similarity_all <- bind_rows(
+  threshold_composition$similarity,
+  filter_composition$similarity
+)
+aggregate_sharing_all <- bind_rows(
+  threshold_composition$aggregate,
+  filter_composition$aggregate
+)
+matched_sharing_all <- bind_rows(
+  threshold_composition$matched,
+  filter_composition$matched
+)
+
+write.csv(composition_similarity_all, file.path(tab_dir, "Table08_composition_similarity.csv"), row.names = FALSE)
+write.csv(aggregate_sharing_all, file.path(tab_dir, "Table09_aggregate_shared_features.csv"), row.names = FALSE)
+write.csv(matched_sharing_all, file.path(tab_dir, "Table10_matched_block_shared_features.csv"), row.names = FALSE)
+```
+
+# Ordination concordance before and after decontam
+
+```{r procrustes}
+run_procrustes <- function(reference_ps, candidate_ps, condition_axis,
+                           condition_id, reference_id,
+                           distance_name, distance_method) {
+  shared_samples <- intersect(sample_names(reference_ps), sample_names(candidate_ps))
+  ref <- prune_samples(shared_samples, reference_ps) %>% prune_nonzero()
+  cand <- prune_samples(shared_samples, candidate_ps) %>% prune_nonzero()
+
+  ref_dist <- phyloseq::distance(ref, method = distance_method)
+  cand_dist <- phyloseq::distance(cand, method = distance_method)
+  ref_coord <- cmdscale(ref_dist, k = 2, eig = FALSE)
+  cand_coord <- cmdscale(cand_dist, k = 2, eig = FALSE)
+  cand_coord <- cand_coord[rownames(ref_coord), , drop = FALSE]
+  md <- data.frame(sample_data(ref), check.names = FALSE)
+  md <- md[rownames(ref_coord), , drop = FALSE]
+
+  if (condition_id == reference_id) {
+    return(tibble(
+      condition_axis = condition_axis,
+      condition_id = condition_id,
+      distance = distance_name,
+      n_samples = nrow(ref_coord),
+      procrustes_correlation = 1,
+      protest_p_value = NA_real_,
+      permutations = permutations_n,
+      permutation_scheme = "not applicable: self-comparison"
+    ))
+  }
+
+  design <- permute::how(nperm = permutations_n, blocks = md$subject_id)
+  set.seed(42)
+  fit <- protest(ref_coord, cand_coord, permutations = design)
+  tibble(
+    condition_axis = condition_axis,
+    condition_id = condition_id,
+    distance = distance_name,
+    n_samples = nrow(ref_coord),
+    procrustes_correlation = unname(fit$t0),
+    protest_p_value = fit$signif,
+    permutations = permutations_n,
+    permutation_scheme = "restricted within participant"
+  )
+}
+
+threshold_procrustes <- bind_rows(lapply(names(threshold_rarefied), function(label) {
+  candidate <- threshold_rarefied[[label]]
+  bind_rows(lapply(names(distance_methods), function(distance_name) {
+    run_procrustes(
+      threshold_rarefied[["None"]],
+      candidate,
+      "decontam_threshold",
+      label,
+      "None",
+      distance_name,
+      distance_methods[[distance_name]]
+    )
+  }))
+}))
+
+filter_procrustes <- bind_rows(lapply(names(filter_rarefied), function(label) {
+  candidate <- filter_rarefied[[label]]
+  bind_rows(lapply(names(distance_methods), function(distance_name) {
+    run_procrustes(
+      filter_rarefied[["no_filter"]],
+      candidate,
+      "filter_at_threshold_0.5",
+      label,
+      "no_filter",
+      distance_name,
+      distance_methods[[distance_name]]
+    )
+  }))
+}))
+
+procrustes_results <- bind_rows(threshold_procrustes, filter_procrustes)
+
+write.csv(procrustes_results, file.path(tab_dir, "Table11_ordination_Procrustes.csv"), row.names = FALSE)
+```
+
+# Taxa removed at threshold 0.5
+
+```{r removed-taxa}
+calls_05 <- decontam_calls[["0.5"]]
+removed_ids <- rownames(calls_05)[calls_05$contaminant]
+otu_pre <- otu_matrix(phy_pre)
+md_pre <- data.frame(sample_data(phy_pre), check.names = FALSE)
+true_samples <- rownames(md_pre)[md_pre$control_status == "sample"]
+control_samples <- rownames(md_pre)[md_pre$control_status == "control"]
+tax <- as(tax_table(phy_pre), "matrix")
+
+removed_taxa <- tibble(
+  ASV = removed_ids,
+  Phylum = as.character(tax[removed_ids, "Phylum"]),
+  Genus = as.character(tax[removed_ids, "Genus"]),
+  Species = as.character(tax[removed_ids, "Species"]),
+  true_sample_reads = rowSums(otu_pre[removed_ids, true_samples, drop = FALSE]),
+  control_reads = rowSums(otu_pre[removed_ids, control_samples, drop = FALSE]),
+  total_reads = true_sample_reads + control_reads,
+  true_sample_prevalence = rowSums(otu_pre[removed_ids, true_samples, drop = FALSE] > 0),
+  control_prevalence = rowSums(otu_pre[removed_ids, control_samples, drop = FALSE] > 0)
+) %>%
+  arrange(desc(total_reads))
+
+removed_genus <- removed_taxa %>%
+  mutate(Genus = ifelse(is.na(Genus) | Genus == "", "Unclassified genus", Genus)) %>%
+  group_by(Genus) %>%
+  summarise(
+    removed_asvs = n(),
+    true_sample_reads = sum(true_sample_reads),
+    control_reads = sum(control_reads),
+    total_reads = sum(total_reads),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(total_reads))
+
+write.csv(removed_taxa, file.path(tab_dir, "Table12_ASVs_removed_at_threshold_0.5.csv"), row.names = FALSE)
+write.csv(removed_genus, file.path(tab_dir, "Table13_Genera_removed_at_threshold_0.5.csv"), row.names = FALSE)
+```
+
+# Integrated summaries
+
+```{r integrated-summary}
+threshold_effect_wide <- permanova_all %>%
+  filter(condition_axis == "decontam_threshold") %>%
+  select(condition_id, distance, variable, R2, p_value, n_samples) %>%
+  pivot_wider(names_from = variable, values_from = c(R2, p_value))
+
+filter_effect_wide <- permanova_all %>%
+  filter(condition_axis == "filter_at_threshold_0.5") %>%
+  select(condition_id, distance, variable, R2, p_value, n_samples) %>%
+  pivot_wider(names_from = variable, values_from = c(R2, p_value))
+
+threshold_integrated <- threshold_retention %>%
+  rename(condition_id = threshold) %>%
+  mutate(condition_axis = "decontam_threshold") %>%
+  left_join(threshold_effect_wide, by = "condition_id") %>%
+  left_join(
+    permdisp_all %>%
+      filter(condition_axis == "decontam_threshold") %>%
+      select(condition_id, distance, system_permdisp_p = p_value),
+    by = c("condition_id", "distance")
+  ) %>%
+  left_join(
+    composition_similarity_all %>%
+      filter(condition_axis == "decontam_threshold"),
+    by = c("condition_id", "condition_axis")
+  ) %>%
+  left_join(
+    aggregate_sharing_all %>%
+      filter(condition_axis == "decontam_threshold", taxonomic_level == "Genus") %>%
+      select(condition_id, distance_dummy = taxonomic_level,
+             shared_genus_read_pct = shared_all_systems_read_pct,
+             exclusive_genus_read_pct = system_exclusive_read_pct),
+    by = "condition_id"
+  ) %>%
+  select(-distance_dummy)
+
+filter_integrated <- filter_retention %>%
+  rename(condition_id = filter_id) %>%
+  left_join(filter_effect_wide, by = "condition_id") %>%
+  left_join(
+    permdisp_all %>%
+      filter(condition_axis == "filter_at_threshold_0.5") %>%
+      select(condition_id, distance, system_permdisp_p = p_value),
+    by = c("condition_id", "distance")
+  ) %>%
+  left_join(
+    composition_similarity_all %>%
+      filter(condition_axis == "filter_at_threshold_0.5"),
+    by = "condition_id"
+  ) %>%
+  left_join(
+    aggregate_sharing_all %>%
+      filter(condition_axis == "filter_at_threshold_0.5", taxonomic_level == "Genus") %>%
+      select(condition_id,
+             shared_genus_read_pct = shared_all_systems_read_pct,
+             exclusive_genus_read_pct = system_exclusive_read_pct),
+    by = "condition_id"
+  )
+
+write.csv(threshold_integrated, file.path(tab_dir, "Table14_integrated_decontam_threshold_results.csv"), row.names = FALSE)
+write.csv(filter_integrated, file.path(tab_dir, "Table15_integrated_filter_results.csv"), row.names = FALSE)
+```
+
+# Figures
+
+```{r figures, fig.width=12, fig.height=8}
+threshold_plot_data <- threshold_retention %>%
+  select(threshold_numeric, true_reads_retained_pct, control_reads_retained_pct) %>%
+  pivot_longer(
+    cols = c(true_reads_retained_pct, control_reads_retained_pct),
+    names_to = "sample_class",
+    values_to = "reads_retained_pct"
+  ) %>%
+  mutate(sample_class = recode(
+    sample_class,
+    true_reads_retained_pct = "True samples",
+    control_reads_retained_pct = "Negative controls"
+  ))
+
+p_retention <- ggplot(
+  threshold_plot_data,
+  aes(threshold_numeric, reads_retained_pct, colour = sample_class)
+) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = seq(0, 0.9, 0.1), labels = c("None", sprintf("%.1f", seq(0.1, 0.9, 0.1)))) +
+  scale_colour_brewer(palette = "Dark2") +
+  labs(x = "Decontam prevalence threshold", y = "Reads retained (%)", colour = NULL) +
+  theme_bw(base_size = 10) + theme(legend.position = "bottom")
+
+p_samples <- ggplot(
+  threshold_retention,
+  aes(threshold_numeric, samples_available_at_5876)
+) +
+  geom_line(colour = "#2c7fb8", linewidth = 0.8) +
+  geom_point(colour = "#2c7fb8", size = 2) +
+  geom_hline(yintercept = 50, linetype = 2, colour = "grey40") +
+  scale_x_continuous(breaks = seq(0, 0.9, 0.1), labels = c("None", sprintf("%.1f", seq(0.1, 0.9, 0.1)))) +
+  labs(x = "Decontam prevalence threshold", y = "Samples retained at 5,876 reads") +
+  theme_bw(base_size = 10)
+
+ggsave(file.path(fig_dir, "Figure1_decontam_read_and_sample_retention.png"),
+       p_retention / p_samples, width = 9, height = 8, dpi = 600)
+ggsave(file.path(fig_dir, "Figure1_decontam_read_and_sample_retention.tiff"),
+       p_retention / p_samples, width = 9, height = 8, dpi = 600,
+       compression = "lzw")
+
+effect_plot_data <- permanova_all %>%
+  filter(condition_axis == "decontam_threshold") %>%
+  mutate(
+    threshold_numeric = ifelse(condition_id == "None", 0, as.numeric(condition_id)),
+    variable = recode(
+      variable,
+      subject_id = "Participant",
+      site_group = "Anatomical site",
+      swab_type2 = "Sampling system"
+    ),
+    distance = recode(
+      distance,
+      weighted_unifrac = "Weighted UniFrac",
+      unweighted_unifrac = "Unweighted UniFrac",
+      bray_curtis = "Bray-Curtis"
+    )
+  )
+
+p_effect <- ggplot(
+  effect_plot_data,
+  aes(threshold_numeric, R2, colour = variable, group = variable)
+) +
+  geom_line(linewidth = 0.7) + geom_point(size = 1.7) +
+  facet_wrap(~distance, ncol = 1) +
+  scale_x_continuous(breaks = seq(0, 0.9, 0.1), labels = c("None", sprintf("%.1f", seq(0.1, 0.9, 0.1)))) +
+  scale_colour_brewer(palette = "Dark2") +
+  labs(x = "Decontam prevalence threshold", y = expression(PERMANOVA~R^2), colour = NULL) +
+  theme_bw(base_size = 9) + theme(legend.position = "bottom")
+
+ggsave(file.path(fig_dir, "Figure2_decontam_effect_size_stability.png"),
+       p_effect, width = 8, height = 10, dpi = 600)
+ggsave(file.path(fig_dir, "Figure2_decontam_effect_size_stability.tiff"),
+       p_effect, width = 8, height = 10, dpi = 600, compression = "lzw")
+
+p_removal <- sample_removal %>%
+  filter(threshold == "0.5", control_status == "sample") %>%
+  ggplot(aes(swab_type2, removed_pct, fill = swab_type2)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_point(aes(shape = subject_id), position = position_jitter(width = 0.08), size = 2) +
+  facet_wrap(~site_group) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(x = "Sampling system", y = "Reads removed by decontam 0.5 (%)", shape = "Participant") +
+  theme_bw(base_size = 10) +
+  theme(axis.text.x = element_text(angle = 35, hjust = 1), legend.position = "bottom") +
+  guides(fill = "none")
+
+ggsave(file.path(fig_dir, "Figure3_sampling_system_read_removal.png"),
+       p_removal, width = 9, height = 5, dpi = 600)
+ggsave(file.path(fig_dir, "Figure3_sampling_system_read_removal.tiff"),
+       p_removal, width = 9, height = 5, dpi = 600, compression = "lzw")
+
+filter_plot <- filter_integrated %>%
+  mutate(filter = factor(filter, levels = unname(filter_labels))) %>%
+  ggplot(aes(reads_retained_vs_v05_pct, R2_swab_type2, colour = distance)) +
+  geom_point(size = 2) +
+  geom_text(aes(label = filter), size = 2.4, check_overlap = TRUE, hjust = -0.05) +
+  facet_wrap(~distance, scales = "free_y") +
+  labs(x = "Reads retained after filtering (%)", y = expression(Sampling-system~R^2), colour = NULL) +
+  theme_bw(base_size = 9) + theme(legend.position = "none")
+
+ggsave(file.path(fig_dir, "Figure4_filter_retention_and_system_effect.png"),
+       filter_plot, width = 11, height = 4.5, dpi = 600)
+ggsave(file.path(fig_dir, "Figure4_filter_retention_and_system_effect.tiff"),
+       filter_plot, width = 11, height = 4.5, dpi = 600, compression = "lzw")
+
+p_procrustes_threshold <- procrustes_results %>%
+  filter(condition_axis == "decontam_threshold") %>%
+  mutate(
+    threshold_numeric = ifelse(condition_id == "None", 0, as.numeric(condition_id)),
+    distance = recode(
+      distance,
+      weighted_unifrac = "Weighted UniFrac",
+      unweighted_unifrac = "Unweighted UniFrac",
+      bray_curtis = "Bray-Curtis"
+    )
+  ) %>%
+  ggplot(aes(threshold_numeric, procrustes_correlation, colour = distance)) +
+  geom_line() + geom_point(size = 2) +
+  scale_x_continuous(breaks = seq(0, 0.9, 0.1), labels = c("None", sprintf("%.1f", seq(0.1, 0.9, 0.1)))) +
+  scale_colour_brewer(palette = "Dark2") +
+  labs(x = "Decontam prevalence threshold", y = "Procrustes correlation", colour = NULL) +
+  theme_bw(base_size = 10) + theme(legend.position = "bottom")
+
+p_procrustes_filter <- procrustes_results %>%
+  filter(condition_axis == "filter_at_threshold_0.5") %>%
+  mutate(
+    condition_id = factor(condition_id, levels = names(filter_rarefied)),
+    distance = recode(
+      distance,
+      weighted_unifrac = "Weighted UniFrac",
+      unweighted_unifrac = "Unweighted UniFrac",
+      bray_curtis = "Bray-Curtis"
+    )
+  ) %>%
+  ggplot(aes(condition_id, procrustes_correlation, colour = distance, group = distance)) +
+  geom_line() + geom_point(size = 2) +
+  scale_colour_brewer(palette = "Dark2") +
+  labs(x = "Filter at decontam threshold 0.5", y = "Procrustes correlation", colour = NULL) +
+  theme_bw(base_size = 9) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none")
+
+p_procrustes <- p_procrustes_threshold / p_procrustes_filter +
+  plot_layout(heights = c(1, 1.2))
+
+ggsave(file.path(fig_dir, "Figure5_ordination_concordance.png"),
+       p_procrustes, width = 10, height = 8, dpi = 600)
+ggsave(file.path(fig_dir, "Figure5_ordination_concordance.tiff"),
+       p_procrustes, width = 10, height = 8, dpi = 600, compression = "lzw")
+
+p_shared <- aggregate_sharing_all %>%
+  filter(taxonomic_level == "Genus") %>%
+  mutate(
+    analysis = recode(
+      condition_axis,
+      decontam_threshold = "Decontam threshold",
+      filter_at_threshold_0.5 = "Filtering at threshold 0.5"
+    )
+  ) %>%
+  ggplot(aes(condition_id, shared_all_systems_read_pct, group = 1)) +
+  geom_line(colour = "#1b9e77") + geom_point(colour = "#1b9e77") +
+  facet_wrap(~analysis, scales = "free_x") +
+  labs(x = NULL, y = "Reads assigned to genera shared by all systems (%)") +
+  theme_bw(base_size = 9) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(file.path(fig_dir, "Figure6_shared_genus_read_fraction.png"),
+       p_shared, width = 11, height = 5, dpi = 600)
+ggsave(file.path(fig_dir, "Figure6_shared_genus_read_fraction.tiff"),
+       p_shared, width = 11, height = 5, dpi = 600, compression = "lzw")
+```
+
+# Reproducibility record
+
+```{r reproducibility}
+final_checks <- bind_rows(
+  validation %>% select(check, passed),
+  tibble(
+    check = c(
+      "all PERMANOVA tests record 9999 permutations",
+      "all PERMDISP tests record 9999 permutations",
+      "all PROTEST permutation runs record 9999 permutations",
+      "no tree transformation function used in analysis",
+      "threshold axis contains None plus 0.1-0.9",
+      "filter axis contains all nine prespecified filters"
+    ),
+    passed = c(
+      all(permanova_all$permutations == permutations_n),
+      all(permdisp_all$permutations == permutations_n),
+      all(procrustes_results$permutations == permutations_n),
+      identical(phy_tree(phy_pre), original_tree),
+      setequal(names(threshold_objects), threshold_labels),
+      setequal(names(filter_objects), filter_ids)
+    )
+  )
+)
+write.csv(final_checks, file.path(tab_dir, "Table16_final_sanity_checks.csv"), row.names = FALSE)
+if (!all(final_checks$passed)) stop("One or more integrated final checks failed")
+
+writeLines(
+  c(
+    "Integrated decontam, filtering, and sampling-system sensitivity analysis",
+    paste("Generated:", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")),
+    "Primary question: stability of the five-system comparison",
+    "Input: Phyloseq/phy_F270R240_260812_v3.rds",
+    "Saved canonical comparison: Phyloseq/phy_F270R240_260812_v4.rds",
+    "Existing phylogenetic tree used without modification",
+    "Threshold axis: no decontam and prevalence thresholds 0.1-0.9 with singleton removal",
+    "Filter axis: nine filters at decontam threshold 0.5",
+    "Rarefaction depth: 5876",
+    "Permutation tests: 9999",
+    "Random seed: 42",
+    "Thresholds causing sample loss are boundary conditions and are not primary comparable analyses."
+  ),
+  file.path(out_dir, "README_results.txt")
+)
+capture.output(sessionInfo(), file = file.path(out_dir, "sessionInfo.txt"))
+final_checks
+```
+
+# Interpretation guardrails
+
+- The primary topic is the comparison of the five integrated sampling systems.
+- Decontamination and filtering are evaluated as sources of analytical sensitivity,
+  not as a search for a preferred p-value.
+- Non-significant system tests do not establish equivalence or interchangeability.
+- Thresholds or filters that remove samples at 5,876 reads change the analysis set
+  and are interpreted as boundary conditions.
+- Total DNA and sequencing reads are not direct measures of absolute bacterial load.
+- Aggregate sharing is reported together with participant-by-site matched-block
+  sharing to avoid overinterpreting pooled intersections.

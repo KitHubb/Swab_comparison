@@ -1,0 +1,13 @@
+"check","passed"
+"50 true and five control samples restored",TRUE
+"threshold 0.5 ASV count matches saved v4",TRUE
+"threshold 0.5 true-sample reads match saved v4",TRUE
+"threshold 0.5 ASV identities match saved v4",TRUE
+"preprocessing tree object was not modified",TRUE
+"prevalence >=10% equals prevalence >=5 at n=50",TRUE
+"all PERMANOVA tests record 9999 permutations",TRUE
+"all PERMDISP tests record 9999 permutations",TRUE
+"all PROTEST permutation runs record 9999 permutations",TRUE
+"no tree transformation function used in analysis",TRUE
+"threshold axis contains None plus 0.1-0.9",TRUE
+"filter axis contains all nine prespecified filters",TRUE

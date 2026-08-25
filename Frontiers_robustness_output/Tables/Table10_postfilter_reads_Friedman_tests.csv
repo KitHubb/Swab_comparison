@@ -1,3 +1,0 @@
-"site_group","response","n_participants","n_systems","statistic","df","p_value","design"
-"Antecubital","post_filter_reads",5,5,3.68,4,0.451041490143655,"Friedman repeated-measures omnibus test"
-"Forehead","post_filter_reads",5,5,1.44,4,0.837213880251151,"Friedman repeated-measures omnibus test"
