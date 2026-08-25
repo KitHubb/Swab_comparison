@@ -727,8 +727,7 @@ removal_friedman &lt;- bind_rows(lapply(sprintf(&quot;%0.1f&quot;, thresholds), 
 })) %&gt;%
   group_by(site_group) %&gt;%
   mutate(
-    p_adjusted_BH = p.adjust(p_value, method = &quot;BH&quot;),
-    p_adjusted_bonferroni = p.adjust(p_value, method = &quot;bonferroni&quot;)
+    p_adjusted_BH = p.adjust(p_value, method = &quot;BH&quot;)
   ) %&gt;%
   ungroup()
 
@@ -1265,7 +1264,6 @@ paired_filter_tests &lt;- fixed_sample_distance_units %&gt;%
   ungroup() %&gt;%
   group_by(distance, pair_class) %&gt;%
   mutate(
-    p_adjusted_bonferroni = p.adjust(p_value, method = &quot;bonferroni&quot;),
     p_adjusted_BH = p.adjust(p_value, method = &quot;BH&quot;)
   ) %&gt;%
   ungroup()

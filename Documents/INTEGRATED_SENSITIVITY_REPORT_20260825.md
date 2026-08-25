@@ -32,7 +32,7 @@ Ordination은 decontam threshold 0.1–0.2에서 미적용 자료와 거의 동�
 
 강한 필터에서 sample loss가 발생하는 문제를 피하기 위해, decontam threshold 0.5의 동일한 50개 biological sample을 모든 필터 조건에서 고정하였다. 각 participant×anatomical-site block 안에서 다섯 sampling system 사이의 pairwise distance를 계산하고, participant 간 거리와 anatomical-site 간 거리를 병렬로 평가하였다.
 
-강한 prevalence 및 mean-abundance filtering은 Bray–Curtis와 unweighted UniFrac에서 같은 participant-site 내 sampling-system 거리를 감소시켰다. 예를 들어 prevalence ≥5 samples에서는 sampling-system 거리가 Bray–Curtis에서 19.55%, unweighted UniFrac에서 38.30% 감소했다. Mean relative abundance ≥1%에서는 각각 47.44%와 85.11% 감소했다. Bonferroni 보정 후에도 이 감소는 유의했다.
+강한 prevalence 및 mean-abundance filtering은 Bray–Curtis와 unweighted UniFrac에서 같은 participant-site 내 sampling-system 거리를 감소시켰다. 예를 들어 prevalence ≥5 samples에서는 sampling-system 거리가 Bray–Curtis에서 19.55%, unweighted UniFrac에서 38.30% 감소했다. Mean relative abundance ≥1%에서는 각각 47.44%와 85.11% 감소했다. Benjamini–Hochberg false discovery rate 보정 후에도 이 감소는 유의했다.
 
 이러한 수렴은 모든 거리 지표에서 일관되지 않았다. Weighted UniFrac sampling-system 거리는 prevalence ≥5 samples에서 231.77%, mean relative abundance ≥1%에서 122.45% 증가했다. Participant 및 site 간 weighted UniFrac 거리도 증가했지만, sampling-system 거리의 상대적 증가가 더 커 participant-to-system distance ratio는 no filter 대비 약 41–55% 수준으로 감소했다. 따라서 강한 filtering은 sampling systems의 생물학적 일치도를 보편적으로 개선한 것이 아니라, 거리 지표가 반영하는 community component를 바꾸었다.
 

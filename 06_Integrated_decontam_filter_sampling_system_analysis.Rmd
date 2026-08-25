@@ -351,8 +351,7 @@ removal_friedman <- bind_rows(lapply(sprintf("%0.1f", thresholds), function(labe
 })) %>%
   group_by(site_group) %>%
   mutate(
-    p_adjusted_BH = p.adjust(p_value, method = "BH"),
-    p_adjusted_bonferroni = p.adjust(p_value, method = "bonferroni")
+    p_adjusted_BH = p.adjust(p_value, method = "BH")
   ) %>%
   ungroup()
 
@@ -895,7 +894,6 @@ paired_filter_tests <- fixed_sample_distance_units %>%
   ungroup() %>%
   group_by(distance, pair_class) %>%
   mutate(
-    p_adjusted_bonferroni = p.adjust(p_value, method = "bonferroni"),
     p_adjusted_BH = p.adjust(p_value, method = "BH")
   ) %>%
   ungroup()
