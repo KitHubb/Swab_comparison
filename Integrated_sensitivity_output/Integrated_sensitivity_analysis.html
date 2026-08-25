@@ -426,12 +426,20 @@ fig_dir &lt;- file.path(out_dir, &quot;Figures&quot;)
 tab_dir &lt;- file.path(out_dir, &quot;Tables&quot;)
 dir.create(fig_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(tab_dir, recursive = TRUE, showWarnings = FALSE)
+cache_dir &lt;- file.path(out_dir, &quot;RDS&quot;)
+dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
 
 distance_methods &lt;- c(
   weighted_unifrac = &quot;wunifrac&quot;,
   unweighted_unifrac = &quot;unifrac&quot;,
   bray_curtis = &quot;bray&quot;
 )
+
+fixed_sample_distance_names &lt;- c(
+  &quot;bray_curtis&quot;, &quot;binary_jaccard&quot;, &quot;aitchison&quot;,
+  &quot;unweighted_unifrac&quot;, &quot;weighted_unifrac&quot;
+)
+aitchison_pseudocount &lt;- 0.5
 
 thresholds &lt;- seq(0.1, 0.9, by = 0.1)
 threshold_labels &lt;- c(&quot;None&quot;, sprintf(&quot;%0.1f&quot;, thresholds))
@@ -1142,11 +1150,30 @@ whether filtering simply compresses all biological variation.</p>
   transform_sample_counts(ps, function(x) x / sum(x)) %&gt;% prune_nonzero()
 })
 
-extract_matched_distance_units &lt;- function(ps, condition_id, distance_name,
-                                           distance_method) {
-  dist_obj &lt;- phyloseq::distance(ps, method = distance_method)
+calculate_fixed_sample_distance &lt;- function(raw_ps, relative_ps, distance_name,
+                                            pseudocount = aitchison_pseudocount) {
+  counts &lt;- t(otu_matrix(raw_ps))
+  relative &lt;- t(otu_matrix(relative_ps))
+  switch(
+    distance_name,
+    bray_curtis = vegan::vegdist(relative, method = &quot;bray&quot;),
+    binary_jaccard = vegan::vegdist(counts, method = &quot;jaccard&quot;, binary = TRUE),
+    aitchison = {
+      logged &lt;- log(counts + pseudocount)
+      clr &lt;- logged - rowMeans(logged)
+      stats::dist(clr, method = &quot;euclidean&quot;)
+    },
+    unweighted_unifrac = phyloseq::distance(relative_ps, method = &quot;unifrac&quot;),
+    weighted_unifrac = phyloseq::distance(relative_ps, method = &quot;wunifrac&quot;),
+    stop(&quot;Unsupported fixed-sample distance: &quot;, distance_name)
+  )
+}
+
+extract_matched_distance_units &lt;- function(raw_ps, relative_ps, condition_id,
+                                           distance_name) {
+  dist_obj &lt;- calculate_fixed_sample_distance(raw_ps, relative_ps, distance_name)
   dist_mat &lt;- as.matrix(dist_obj)
-  md &lt;- data.frame(sample_data(ps), check.names = FALSE) %&gt;%
+  md &lt;- data.frame(sample_data(raw_ps), check.names = FALSE) %&gt;%
     rownames_to_column(&quot;sample_name&quot;)
   pairs &lt;- which(upper.tri(dist_mat), arr.ind = TRUE)
 
@@ -1204,12 +1231,29 @@ extract_matched_distance_units &lt;- function(ps, condition_id, distance_name,
 }
 
 fixed_sample_distance_units &lt;- bind_rows(lapply(names(filter_distance_objects), function(id) {
-  bind_rows(lapply(names(distance_methods), function(distance_name) {
+  bind_rows(lapply(fixed_sample_distance_names, function(distance_name) {
     extract_matched_distance_units(
-      filter_distance_objects[[id]], id, distance_name,
-      distance_methods[[distance_name]]
+      filter_objects[[id]], filter_distance_objects[[id]], id, distance_name
     )
   }))
+}))
+
+aitchison_pseudocount_sensitivity &lt;- bind_rows(lapply(names(filter_objects), function(id) {
+  distance_vectors &lt;- lapply(c(`0.1` = 0.1, `0.5` = 0.5, `1.0` = 1), function(pc) {
+    as.vector(calculate_fixed_sample_distance(
+      filter_objects[[id]], filter_distance_objects[[id]],
+      &quot;aitchison&quot;, pseudocount = pc
+    ))
+  })
+  tibble(
+    condition_id = id,
+    comparison = c(&quot;0.1_vs_0.5&quot;, &quot;0.5_vs_1.0&quot;, &quot;0.1_vs_1.0&quot;),
+    spearman_rho = c(
+      cor(distance_vectors[[&quot;0.1&quot;]], distance_vectors[[&quot;0.5&quot;]], method = &quot;spearman&quot;),
+      cor(distance_vectors[[&quot;0.5&quot;]], distance_vectors[[&quot;1.0&quot;]], method = &quot;spearman&quot;),
+      cor(distance_vectors[[&quot;0.1&quot;]], distance_vectors[[&quot;1.0&quot;]], method = &quot;spearman&quot;)
+    )
+  )
 }))
 
 baseline_units &lt;- fixed_sample_distance_units %&gt;%
@@ -1307,6 +1351,25 @@ write.csv(
   distance_signal_ratios,
   file.path(tab_dir, &quot;Table20_fixed50_signal_ratios.csv&quot;),
   row.names = FALSE
+)
+write.csv(
+  aitchison_pseudocount_sensitivity,
+  file.path(tab_dir, &quot;Table21_Aitchison_pseudocount_sensitivity.csv&quot;),
+  row.names = FALSE
+)
+
+saveRDS(
+  list(
+    cache_version = &quot;2026-08-25_distance_v2&quot;,
+    pseudocount = aitchison_pseudocount,
+    distance_names = fixed_sample_distance_names,
+    matched_distance_units = fixed_sample_distance_units,
+    matched_distance_summary = fixed_sample_distance_summary,
+    paired_filter_tests = paired_filter_tests,
+    signal_ratios = distance_signal_ratios,
+    aitchison_pseudocount_sensitivity = aitchison_pseudocount_sensitivity
+  ),
+  file.path(cache_dir, &quot;fixed50_distance_results.rds&quot;)
 )</code></pre>
 </div>
 <div id="taxa-removed-at-threshold-0.5" class="section level1" number="11">
@@ -1469,7 +1532,9 @@ effect_plot_data &lt;- permanova_all %&gt;%
       distance,
       weighted_unifrac = &quot;Weighted UniFrac&quot;,
       unweighted_unifrac = &quot;Unweighted UniFrac&quot;,
-      bray_curtis = &quot;Bray-Curtis&quot;
+      bray_curtis = &quot;Bray-Curtis&quot;,
+      binary_jaccard = &quot;Binary Jaccard&quot;,
+      aitchison = &quot;Aitchison&quot;
     )
   )
 
@@ -1528,7 +1593,9 @@ p_procrustes_threshold &lt;- procrustes_results %&gt;%
       distance,
       weighted_unifrac = &quot;Weighted UniFrac&quot;,
       unweighted_unifrac = &quot;Unweighted UniFrac&quot;,
-      bray_curtis = &quot;Bray-Curtis&quot;
+      bray_curtis = &quot;Bray-Curtis&quot;,
+      binary_jaccard = &quot;Binary Jaccard&quot;,
+      aitchison = &quot;Aitchison&quot;
     )
   ) %&gt;%
   ggplot(aes(threshold_numeric, procrustes_correlation, colour = distance)) +
@@ -1546,7 +1613,9 @@ p_procrustes_filter &lt;- procrustes_results %&gt;%
       distance,
       weighted_unifrac = &quot;Weighted UniFrac&quot;,
       unweighted_unifrac = &quot;Unweighted UniFrac&quot;,
-      bray_curtis = &quot;Bray-Curtis&quot;
+      bray_curtis = &quot;Bray-Curtis&quot;,
+      binary_jaccard = &quot;Binary Jaccard&quot;,
+      aitchison = &quot;Aitchison&quot;
     )
   ) %&gt;%
   ggplot(aes(condition_id, procrustes_correlation, colour = distance, group = distance)) +
@@ -1601,7 +1670,9 @@ p_fixed_change &lt;- fixed_sample_distance_summary %&gt;%
       distance,
       weighted_unifrac = &quot;Weighted UniFrac&quot;,
       unweighted_unifrac = &quot;Unweighted UniFrac&quot;,
-      bray_curtis = &quot;Bray-Curtis&quot;
+      bray_curtis = &quot;Bray-Curtis&quot;,
+      binary_jaccard = &quot;Binary Jaccard&quot;,
+      aitchison = &quot;Aitchison&quot;
     )
   ) %&gt;%
   ggplot(aes(condition_id, median_percent_change, colour = pair_class,
@@ -1645,7 +1716,9 @@ p_signal_ratio &lt;- distance_signal_ratios %&gt;%
       distance,
       weighted_unifrac = &quot;Weighted UniFrac&quot;,
       unweighted_unifrac = &quot;Unweighted UniFrac&quot;,
-      bray_curtis = &quot;Bray-Curtis&quot;
+      bray_curtis = &quot;Bray-Curtis&quot;,
+      binary_jaccard = &quot;Binary Jaccard&quot;,
+      aitchison = &quot;Aitchison&quot;
     )
   ) %&gt;%
   ggplot(aes(condition_id, signal_to_system_ratio, colour = signal,
@@ -1683,7 +1756,8 @@ record</h1>
       &quot;threshold axis contains None plus 0.1-0.9&quot;,
       &quot;filter axis contains all nine prespecified filters&quot;,
       &quot;fixed-sample filtering comparison retains the same 50 samples&quot;,
-      &quot;fixed-sample matched-distance units have expected block counts&quot;
+      &quot;fixed-sample matched-distance units have expected block counts&quot;,
+      &quot;fixed-sample analysis contains all five distance measures&quot;
     ),
     passed = c(
       all(permanova_all$permutations == permutations_n),
@@ -1704,12 +1778,56 @@ record</h1>
           )) %&gt;%
           transmute(ok = n == expected) %&gt;%
           pull(ok)
-      )
+      ),
+      setequal(unique(fixed_sample_distance_units$distance),
+               fixed_sample_distance_names)
     )
   )
 )
 write.csv(final_checks, file.path(tab_dir, &quot;Table16_final_sanity_checks.csv&quot;), row.names = FALSE)
 if (!all(final_checks$passed)) stop(&quot;One or more integrated final checks failed&quot;)
+
+saveRDS(
+  list(
+    cache_version = &quot;2026-08-25_integrated_v2&quot;,
+    phy_pre = phy_pre,
+    original_tree = original_tree,
+    clean_all_objects = clean_all_objects,
+    true_no_filter_objects = true_no_filter_objects,
+    threshold_objects = threshold_objects,
+    filter_objects = filter_objects,
+    threshold_rarefied = threshold_rarefied,
+    filter_rarefied = filter_rarefied
+  ),
+  file.path(cache_dir, &quot;analysis_objects.rds&quot;)
+)
+
+saveRDS(
+  list(
+    cache_version = &quot;2026-08-25_integrated_v2&quot;,
+    settings = list(seed = 42L, permutations = permutations_n,
+                    rarefaction_depth = target_depth,
+                    aitchison_pseudocount = aitchison_pseudocount),
+    threshold_retention = threshold_retention,
+    filter_retention = filter_retention,
+    sample_removal = sample_removal,
+    removal_friedman = removal_friedman,
+    permanova = permanova_all,
+    permdisp = permdisp_all,
+    alpha = alpha_results,
+    composition_similarity = composition_similarity_all,
+    aggregate_sharing = aggregate_sharing_all,
+    matched_sharing = matched_sharing_all,
+    procrustes = procrustes_results,
+    fixed50_matched_distance_units = fixed_sample_distance_units,
+    fixed50_matched_distance_summary = fixed_sample_distance_summary,
+    fixed50_paired_filter_tests = paired_filter_tests,
+    fixed50_signal_ratios = distance_signal_ratios,
+    aitchison_pseudocount_sensitivity = aitchison_pseudocount_sensitivity,
+    final_checks = final_checks
+  ),
+  file.path(cache_dir, &quot;integrated_results.rds&quot;)
+)
 
 writeLines(
   c(
@@ -1723,6 +1841,9 @@ writeLines(
     &quot;Filter axis: nine filters at decontam threshold 0.5&quot;,
     &quot;Fixed-sample distance validation: the same 50 samples under every filter&quot;,
     &quot;Paired units: participant-site, site-system, and participant-system blocks&quot;,
+    &quot;Fixed-sample distances: Bray-Curtis, binary Jaccard, Aitchison, unweighted UniFrac, weighted UniFrac&quot;,
+    paste(&quot;Aitchison pseudocount:&quot;, aitchison_pseudocount),
+    &quot;Persistent cache: Integrated_sensitivity_output/RDS plus knitr_cache&quot;,
     &quot;Rarefaction depth: 5876&quot;,
     &quot;Permutation tests: 9999&quot;,
     &quot;Random seed: 42&quot;,
@@ -1732,7 +1853,7 @@ writeLines(
 )
 capture.output(sessionInfo(), file = file.path(out_dir, &quot;sessionInfo.txt&quot;))
 final_checks</code></pre>
-<pre><code>## # A tibble: 14 × 2
+<pre><code>## # A tibble: 15 × 2
 ##    check                                                          passed
 ##    &lt;chr&gt;                                                          &lt;lgl&gt; 
 ##  1 50 true and five control samples restored                      TRUE  
@@ -1748,7 +1869,8 @@ final_checks</code></pre>
 ## 11 threshold axis contains None plus 0.1-0.9                      TRUE  
 ## 12 filter axis contains all nine prespecified filters             TRUE  
 ## 13 fixed-sample filtering comparison retains the same 50 samples  TRUE  
-## 14 fixed-sample matched-distance units have expected block counts TRUE</code></pre>
+## 14 fixed-sample matched-distance units have expected block counts TRUE  
+## 15 fixed-sample analysis contains all five distance measures      TRUE</code></pre>
 </div>
 <div id="interpretation-guardrails" class="section level1" number="15">
 <h1><span class="header-section-number">15</span> Interpretation

@@ -13,3 +13,4 @@
 "filter axis contains all nine prespecified filters",TRUE
 "fixed-sample filtering comparison retains the same 50 samples",TRUE
 "fixed-sample matched-distance units have expected block counts",TRUE
+"fixed-sample analysis contains all five distance measures",TRUE

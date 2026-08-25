@@ -34,6 +34,10 @@ Ordination은 decontam threshold 0.1–0.2에서 미적용 자료와 거의 동�
 
 강한 prevalence 및 mean-abundance filtering은 Bray–Curtis와 unweighted UniFrac에서 같은 participant-site 내 sampling-system 거리를 감소시켰다. 예를 들어 prevalence ≥5 samples에서는 sampling-system 거리가 Bray–Curtis에서 19.55%, unweighted UniFrac에서 38.30% 감소했다. Mean relative abundance ≥1%에서는 각각 47.44%와 85.11% 감소했다. Benjamini–Hochberg false discovery rate 보정 후에도 이 감소는 유의했다.
 
+Binary Jaccard와 Aitchison distance에서도 같은 방향이 확인되었다. Prevalence ≥5 samples에서 system 간 거리는 Binary Jaccard 27.28%, Aitchison 37.82% 감소했다. Mean relative abundance ≥1%에서는 각각 65.25%와 81.12% 감소했다. Aitchison은 raw ASV count에 pseudocount 0.5를 더한 뒤 centered log-ratio 변환하여 계산했다. Pseudocount 0.1, 0.5 및 1에서 얻은 거리행렬의 Spearman correlation은 0.9869–0.9993으로 높아, 0.5 선택에 따른 거리 순위 변화는 작았다.
+
+Singleton 및 doubleton 제거에서도 일부 paired test의 BH-adjusted p-value는 0.05 미만이었지만 거리 변화량은 대체로 1% 미만이었다. 따라서 통계적 유의성만으로 filtering의 실질적 효과를 판단하지 않고 median percent change와 biological-signal/system-distance ratio를 함께 해석해야 한다.
+
 이러한 수렴은 모든 거리 지표에서 일관되지 않았다. Weighted UniFrac sampling-system 거리는 prevalence ≥5 samples에서 231.77%, mean relative abundance ≥1%에서 122.45% 증가했다. Participant 및 site 간 weighted UniFrac 거리도 증가했지만, sampling-system 거리의 상대적 증가가 더 커 participant-to-system distance ratio는 no filter 대비 약 41–55% 수준으로 감소했다. 따라서 강한 filtering은 sampling systems의 생물학적 일치도를 보편적으로 개선한 것이 아니라, 거리 지표가 반영하는 community component를 바꾸었다.
 
 Singleton, doubleton 및 total count ≤10 제거에서는 세 거리의 sampling-system 차이가 작았다. Total count ≤10 제거 시 같은 block 내 sampling-system 거리는 Bray–Curtis에서 0.74% 감소하고 unweighted 및 weighted UniFrac에서 각각 1.11%와 5.48% 증가했으며, 보정 후 유의하지 않았다. 이 범위는 희소 feature를 일부 줄이면서 원래 community geometry를 가장 잘 유지한 보수적 filtering 범위로 해석할 수 있다.
@@ -54,6 +58,8 @@ Threshold 0.5는 control reads를 크게 줄이면서 50개 true sample과 91.64
 - 핵심 통합표: `Table14_integrated_decontam_threshold_results.csv`, `Table15_integrated_filter_results.csv`
 - 동일 50개 샘플 검증: `Table17_fixed50_matched_distance_units.csv`–`Table20_fixed50_signal_ratios.csv`
 - 추가 그림: `Figure7_fixed50_matched_distance_change`, `Figure8_fixed50_signal_preservation_ratio`
+- Aitchison pseudocount 검증: `Table21_Aitchison_pseudocount_sensitivity.csv`
+- 재사용 가능한 객체 및 결과: `Integrated_sensitivity_output/RDS/analysis_objects.rds`, `integrated_results.rds`, `fixed50_distance_results.rds`
 - 실행 환경: `Integrated_sensitivity_output/sessionInfo.txt`
 
 기존 논문 그림 코드와 결과인 `05_Final_main_supplement_figures.Rmd` 및 `Final_main_supplement_figure_output/`은 유지했다. 이전 singleton/doubleton/tenton 파생 Rmd와 06–09번 분산 분석 코드 및 각 결과 폴더는 본 통합 분석으로 대체했다.
