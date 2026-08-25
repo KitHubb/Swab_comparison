@@ -1159,7 +1159,9 @@ phy <- readRDS("./Phyloseq/phy_F270R240_260812_v4.rds")
 # across the 50 true samples, following the filtering sensitivity analysis.
 phy_true_unfiltered <- subset_samples(phy, control_status == "sample") %>%
   prune_taxa(taxa_sums(.) > 0, .)
+
 phy <- prune_taxa(taxa_sums(phy_true_unfiltered) > 1, phy_true_unfiltered)
+
 filter_summary <- data.frame(
   analysis = "canonical_singleton",
   retention_rule = "taxa_sums > 1",
@@ -2177,45 +2179,62 @@ meta2 <- meta %>%
 
 
 ```{r}
-# swab type만
-adonis2(
-  dist ~ swab_type2,
-  data = meta2,
-  permutations = 9999,
-  strata = meta2$subject_id
-)
 
-# site만
-adonis2(
-  dist ~ site_group,
-  data = meta2,
-  permutations = 9999,
-  strata = meta2$subject_id
-)
+
+
 
 # collection medium만
-adonis2(
+df5 <-adonis2(
   dist ~ Collection_medium,
   data = meta2,
   permutations = 9999,
   strata = meta2$subject_id
 )
 
+
 # swab material만
-adonis2(
+df1 <-adonis2(
+  dist ~ subject_id,
+  data = meta2,
+  permutations = 9999)
+
+
+# site만
+df2 <-adonis2(
+  dist ~ site_group,
+  data = meta2,
+  permutations = 9999,
+  strata = meta2$subject_id
+)
+# swab type만
+df3 <- adonis2(
+  dist ~ swab_type2,
+  data = meta2,
+  permutations = 9999,
+  strata = meta2$subject_id
+)
+# swab material만
+df4 <-adonis2(
   dist ~ Swab_material,
   data = meta2,
   permutations = 9999,
   strata = meta2$subject_id
 )
 
+univar_per <- data.frame(
+  variable = c("Participant identity", "Anatomical site", "Sampling system", "Swab-tip material", "Collection medium"),
+  df = c(df1$Df[1], df2$Df[1],  df3$Df[1], df4$Df[1], df5$Df[1]),
+  `F` = c(df1$`F`[1], df2$`F`[1],  df3$`F`[1], df4$`F`[1], df5$`F`[1]),
+  R2 = c(df1$R2[1], df2$R2[1], df3$R2[1], df4$R2[1], df5$R2[1]),
+  `p-value` = c(df1$`Pr(>F)`[1], df2$`Pr(>F)`[1], df3$`Pr(>F)`[1], df4$`Pr(>F)`[1], df5$`Pr(>F)`[1])
+)
 
-# swab material만
-adonis2(
-  dist ~ subject_id,
-  data = meta2,
-  permutations = 9999)
 
+univar_per$q.value <- p.adjust(univar_per$p.value, "fdr")
 
-
+write.csv(
+    univar_per,
+    file.path(out_dir, "Table3_permanova_BH.csv"),
+    row.names = FALSE
+  )
 ```
