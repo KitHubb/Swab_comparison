@@ -1,106 +1,116 @@
 # Comparative Evaluation of Skin Microbiome Sampling Systems
 
-This repository contains the reproducible R workflow and analysis products for a within-participant pilot study comparing five integrated swab–collection-medium systems for bacterial microbiome sampling at two skin sites. Bacterial communities were characterized by V1–V3 16S rRNA gene amplicon sequencing.
+## Introduction
 
-## Scientific objective
+This repository contains the R project, analysis code, processed data objects, tables, and figures used to reproduce the analyses reported in the manuscript *“Comparative Evaluation of Skin Microbiome Sampling Systems.”* The study compares five integrated swab–collection-medium systems for V1–V3 16S rRNA gene profiling of the antecubital fossa and forehead in a repeated-measures design.
 
-The primary objective is to determine whether the choice of sampling system materially affects estimates of skin bacterial diversity and community composition. Because skin samples contain relatively low microbial biomass, the analysis also evaluates whether conclusions about sampling-system effects remain stable across contaminant-removal thresholds, rare-feature filtering rules, and beta-diversity metrics.
+## Preprocessing
 
-The sensitivity analysis supports the sampling-system comparison; it is not treated as a separate optimization study. Participant identity and anatomical site are retained as major biological sources of variation in the statistical design.
+Raw paired-end reads were processed with the Nextflow workflow [amplicon_16S_v1v3_qiime_nf](https://github.com/KitHubb/amplicon_16S_v1v3_qiime_nf).
 
-## Study design
+### V1–V3 truncation-length selection
 
-- Five participants
-- Two anatomical sites: antecubital fossa and forehead
-- Five sampling systems per participant and site
-- Fifty biological samples in a repeated-measures design
-- Extraction-negative controls used for prevalence-based contaminant identification
-- V1–V3 16S rRNA gene amplicon sequencing
-- Amplicon sequence variant (ASV)-based analysis
+DADA2 truncation settings were benchmarked using the following parameter sets:
 
-## Analysis framework
+```yaml
+dada2_parameter_sets:
+  - name: F0_R0
+    trunc_len_f: 0
+    trunc_len_r: 0
 
-### Primary analysis
+  - name: F280_R280
+    trunc_len_f: 280
+    trunc_len_r: 280
 
-The manuscript analysis uses a post-decontamination phyloseq object, removes control samples and singleton ASVs, and rarefies biological samples to 5,876 reads. It includes:
+  - name: F280_R275
+    trunc_len_f: 280
+    trunc_len_r: 275
 
-- Shannon diversity and observed ASVs
-- Bray–Curtis, binary Jaccard, unweighted UniFrac, and weighted UniFrac analyses
-- bacterial community composition at phylum and genus levels
-- ASV- and genus-level overlap among sampling systems
-- participant- and site-stratified analyses
-- univariable PERMANOVA models that account for the repeated-measures structure where applicable
-- Benjamini–Hochberg false-discovery-rate correction for multiple testing
+  - name: F275_R280
+    trunc_len_f: 275
+    trunc_len_r: 280
 
-PERMANOVA and other permutation-based procedures use 9,999 permutations and a random seed of 42.
+  - name: F280_R270
+    trunc_len_f: 280
+    trunc_len_r: 270
 
-### Integrated sensitivity analysis
+  - name: F275_R275
+    trunc_len_f: 275
+    trunc_len_r: 275
 
-The supplementary validation workflow evaluates:
+  - name: F280_R265
+    trunc_len_f: 280
+    trunc_len_r: 265
 
-- no decontamination and prevalence-based decontam thresholds from 0.1 to 0.9
-- multiple rare-feature filtering rules at the selected threshold of 0.5
-- retention of biological and control reads
-- retention of samples at the prespecified rarefaction depth
-- alpha-diversity stability
-- PERMANOVA and PERMDISP results
-- composition and ordination concordance
-- matched within-participant and within-site distances
-- Bray–Curtis, binary Jaccard, Aitchison, unweighted UniFrac, and weighted UniFrac distances
-- Aitchison pseudocount sensitivity
+  - name: F275_R270
+    trunc_len_f: 275
+    trunc_len_r: 270
 
-The principal Aitchison analysis uses a pseudocount of 0.5. Reusable analysis objects are saved during the integrated workflow so that additional summaries can be generated without repeating all upstream calculations.
+  - name: F280_R260
+    trunc_len_f: 280
+    trunc_len_r: 260
 
-## Repository structure
+  - name: F270_R270
+    trunc_len_f: 270
+    trunc_len_r: 270
 
-```text
-.
-├── 01_Preprocessing.Rmd
-├── 02_Main_Supplement_Figure_Tables_script.Rmd
-├── Figures/
-├── metadata/
-├── Phyloseq/
-├── Script/
-├── Tables/
-├── Rproj_DT_Swab.Rproj
-└── README.md
+final_dada2_setting:
+  name: F270_R240
+  trunc_len_f: 270
+  trunc_len_r: 240
 ```
 
-### Core files
+Read retention, DADA2 denoising performance, and species-level resolution obtained with Greengenes2 were compared across candidate settings. Forward and reverse truncation lengths of 270 and 240 bp, respectively, were selected for the final analysis. Taxonomic classification for the manuscript was then performed using SILVA.
+
+```bash
+conda activate nextflow_nf
+
+cd /data/home2/ksy/260811_DT_swab
+
+nextflow run \
+  /data/software/nextflow/amplicon_16S_v1v3_qiime_nf/main.nf \
+  -profile singularity \
+  -params-file /data/software/nextflow/amplicon_16S_v1v3_qiime_nf/params/v1v3_q20.yml \
+  --reads '/data/FASTQ/HN00182797/DT/*_{1,2}.fastq.gz' \
+  --run_label HN00182797 \
+  --outdir /data/home2/ksy/260811_DT_swab/Output/HN00182797 \
+  --classifier /data/Reference/QIIME2-2025.7/Bacteria/SILVA/silva-138-99-nb-classifier.qza \
+  --taxonomy_label SILVA \
+  --metadata /data/home2/ksy/260811_DT_swab/Input/DT_metadata_qiime.tsv \
+  --trimm_optimal true \
+  --trimm_combinations /data/software/nextflow/amplicon_16S_v1v3_qiime_nf/params/trimm_combinations_10bp.tsv \
+  --diversity_enabled false \
+  -work-dir /data/home2/ksy/260811_DT_swab/work/HN00182797 \
+  -resume
+```
+
+### Decontamination
+
+Prevalence-based contaminant identification was evaluated across decontam thresholds by comparing the numbers and proportions of ASVs and reads retained or removed from biological samples and negative controls. The supporting sensitivity workflow is distributed as the R package [decontamSensitivity](https://github.com/KitHubb/decontamSensitivity).
+
+## Integrated sensitivity analysis
+
+The sensitivity analysis evaluates whether the estimated effect of the sampling system remains consistent across contaminant-removal thresholds and feature-filtering rules. It supports the primary sampling-system comparison by quantifying data retention and the stability of alpha- and beta-diversity results in low-biomass skin samples.
+
+## Downstream analysis
+
+QIIME 2 outputs were converted into `phyloseq` objects and analysed in R. The workflow includes singleton removal, rarefaction, alpha and beta diversity, taxonomic composition, overlap among sampling systems, and PERMANOVA. Detailed analysis and figure-generation code is provided in the files below.
+
+## Core files
 
 | File | Purpose |
 |---|---|
-| `01_Preprocessing.Rmd` | Metadata integration, quality control, contaminant assessment, and construction of analysis-ready phyloseq objects |
-| `02_Main_Supplement_Figure_Tables_script.Rmd` | Canonical singleton-filtered manuscript tables and main/supplementary figures |
-
-### Principal outputs
-
-- `Figures/`: manuscript-ready main and supplementary figures from the canonical analysis
-- `Tables/`: manuscript-ready tables and numerical results supporting the figures
-
-## Reproducing the analysis
-
-Open `Rproj_DT_Swab.Rproj` in RStudio and run the documents from the repository root in the following order:
-
-1. `01_Preprocessing.Rmd`
-2. `02_Main_Supplement_Figure_Tables_script.Rmd`
-
-The final-figure document can be rerun from its saved phyloseq input when upstream preprocessing does not need to be repeated. File paths are repository-relative unless an input location is explicitly documented in the corresponding R Markdown file.
-
-Key R packages include `phyloseq`, `decontam`, `vegan`, `permute`, `tidyverse`, `ggplot2`, and related visualization packages loaded by the individual documents. Package versions should be recorded in the computational environment used for the final manuscript release.
-
-## Interpretation
-
-This repository is designed to distinguish biological variation from variation associated with the sampling system. The sensitivity analyses quantify how low-biomass preprocessing decisions alter data retention and effect estimates, and whether the main inference regarding sampling-system differences is preserved. Results from aggressive filtering conditions are presented as sensitivity analyses rather than as alternative primary analyses.
+| `01_Preprocessing.Rmd` | Metadata integration, decontamination, quality checks, and construction of analysis-ready `phyloseq` objects |
+| `02_Main_Supplement_Figure_Tables_script.Rmd` | Statistical analyses and generation of the manuscript's main and supplementary figures and tables |
+| `Figures/` | Final main and supplementary figures |
+| `Tables/` | Final tables and numerical results |
+| `Phyloseq/` | Processed `phyloseq` objects used by the R workflow |
+| `metadata/` | Analysis metadata |
 
 ## Data availability
 
-Processed phyloseq objects and analysis metadata required by the R workflow are organized within this project. Raw FASTQ files are maintained separately because of file size and participant-data governance requirements. Accession information and public-data availability will be added to the associated manuscript when finalized.
-
-## Status
-
-The decontamination-based reanalysis, canonical manuscript analysis, and integrated preprocessing-sensitivity analysis have been completed. Manuscript text and supplementary materials remain under revision.
+The sequence data from this study have been submitted to the NCBI BioProject under accession number [PRJNA1075916](https://www.ncbi.nlm.nih.gov/bioproject/PRJNA1075916).
 
 ## Citation
 
-Please cite the associated article when it becomes available. A complete citation and data accession will be added after publication.
+Citation information will be added after publication of the associated article.
