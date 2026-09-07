@@ -1,0 +1,5 @@
+"site","distance","variable","R2","F","p_value"
+"Antecubital fossa","Unweighted UniFrac","subject_id",0.341293175820157,2.59063033273643,1e-04
+"Antecubital fossa","Weighted UniFrac","subject_id",0.656178820188709,9.54244326293187,1e-04
+"Forehead","Unweighted UniFrac","subject_id",0.395643998827385,3.27326938145503,1e-04
+"Forehead","Weighted UniFrac","subject_id",0.596057779624483,7.37800791249759,4e-04

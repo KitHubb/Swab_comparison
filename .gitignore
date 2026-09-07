@@ -17,3 +17,7 @@ renv/cache/
 
 # Local reproducibility library; packages are restored separately on each computer.
 /R_library/
+
+# Local working documents and extended sensitivity analysis
+/Documents/
+/06_Integrated_decontam_filter_sampling_system_analysis.Rmd

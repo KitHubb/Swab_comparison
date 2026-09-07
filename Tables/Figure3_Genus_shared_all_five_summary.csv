@@ -1,0 +1,7 @@
+"subset","retained_genera","shared_by_all_five_genera","mean_abundance_cutoff","total_reads","reads_from_shared_genera","shared_genus_relative_abundance_pct","filtering"
+"Total",344,59,0,847074,825080,97.4035326311515,"No abundance filtering"
+"Antecubital fossa",278,48,0,404034,385808,95.488993500547,"No abundance filtering"
+"Forehead",211,29,0,443040,431552,97.4070061394005,"No abundance filtering"
+"Total",44,40,0.001,824861,819208,99.314672411473,"Mean abundance >=0.1%"
+"Antecubital fossa",50,39,0.001,392576,383825,97.7708774861428,"Mean abundance >=0.1%"
+"Forehead",23,20,0.001,433047,429424,99.1633702577318,"Mean abundance >=0.1%"

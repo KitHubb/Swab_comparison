@@ -1,0 +1,1599 @@
+---
+title: "Final Main and Supplementary Figure Analysis"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+이 문서는 **decontam 완료 후 저장된 phyloseq 객체**
+`./Phyloseq/phy_F270R240_260812_v4.rds`를 불러오는 단계부터 시작합니다.
+원자료 import, ASV table 구성 및 decontam 과정은 포함하지 않습니다. 저장된 객체에서
+control sample을 제외하고 rarefaction한 뒤, 통계 분석과 각 패널 생성 및 최종 Figure
+저장까지 수행합니다.
+
+# Packages and plotting helper functions
+
+```{r packages-and-functions, message=FALSE, warning=FALSE}
+project_library <- file.path(getwd(), "R_library")
+if (dir.exists(project_library)) .libPaths(c(project_library, .libPaths()))
+suppressPackageStartupMessages({
+  library(phyloseq)
+  library(vegan)
+  library(dplyr)
+  library(tidyr)
+  library(tibble)
+  library(ggplot2)
+  library(patchwork)
+  library(ComplexUpset)
+  library(pheatmap)
+  library(RColorBrewer)
+  library(ggpubr)
+})
+
+
+# Functions used directly in the final manuscript figures
+
+theme_manuscript <- function(base_size = 8) {
+  theme_classic(base_size = base_size) +
+    theme(
+      text = element_text(colour = "black"),
+      axis.title = element_text(size = 9, face = "bold", colour = "black"),
+      axis.text = element_text(size = 8, colour = "black"),
+      plot.title = element_text(size = 10, face = "bold", hjust = 0.5,
+                                margin = margin(b = 4)),
+      plot.subtitle = element_text(size = 9, face = "bold", hjust = 0.5,
+                                   margin = margin(b = 3)),
+      strip.background = element_blank(),
+      strip.text = element_text(size = 9, face = "bold"),
+      legend.title = element_text(size = 9, face = "bold"),
+      legend.text = element_text(size = 8),
+      panel.grid = element_blank(),
+      plot.margin = margin(6, 6, 6, 6)
+    )
+}
+
+alpha_plot <- function(data, x_var, fill_var, shape_var, site_title,
+                       y_title = NULL, paired = TRUE, show_legend = FALSE) {
+  p <- ggplot(
+    data,
+    aes(x = .data[[x_var]], y = Value,
+        fill = .data[[fill_var]], shape = .data[[shape_var]])
+  ) +
+    geom_boxplot(
+      aes(group = interaction(.data[[x_var]], Index)),
+      width = 0.65, outlier.shape = NA, colour = "black", linewidth = 0.45
+    ) +
+    geom_point(
+      position = position_jitter(width = 0.08),
+      size = 1.7, colour = "black"
+    ) +
+    ggpubr::geom_pwc(
+      method = "wilcox_test",
+      method.args = list(paired = paired, exact = FALSE),
+      label = "{p.adj.signif}",
+      p.adjust.method = "BH",
+      step.increase = 0.10,
+      hide.ns = TRUE
+    ) +
+    facet_wrap(~Index, scales = "free_y", nrow = 1) +
+    labs(
+      x = NULL, y = y_title, title = site_title,
+      fill = ifelse(fill_var == "subject_id", "Participant", "Sampling type"),
+      shape = ifelse(shape_var == "subject_id", "Participant", "Sampling type")
+    ) +
+    theme_manuscript()
+
+  if (!show_legend) p <- p + theme(legend.position = "none")
+  p
+}
+
+beta_plot <- function(ps, site, distance_method, test_variable,
+                      colour_variable, shape_variable,
+                      strata_variable = NULL, site_title,
+                      metric_title, show_legend = TRUE) {
+  keep <- sample_names(ps)[as.character(sample_data(ps)$site_group) == site]
+  ps_site <- prune_samples(keep, ps)
+  ps_site <- prune_taxa(taxa_sums(ps_site) > 0, ps_site)
+
+  distance_object <- phyloseq::distance(ps_site, method = distance_method)
+  ordination <- ordinate(ps_site, method = "PCoA", distance = distance_method)
+  explained <- ordination$values$Relative_eig[1:2] * 100
+
+  coordinates <- data.frame(ordination$vectors[, 1:2], check.names = FALSE)
+  coordinates$sample_name <- rownames(coordinates)
+  metadata <- data.frame(sample_data(ps_site), check.names = FALSE)
+  metadata$sample_name <- rownames(metadata)
+  coordinates <- left_join(coordinates, metadata, by = "sample_name")
+  coordinates <- left_join(coordinates, swab_key, by = "swab_type2")
+
+  set.seed(42)
+  model_formula <- reformulate(test_variable, response = "distance_object")
+  if (is.null(strata_variable)) {
+    permanova <- adonis2(
+      model_formula, data = metadata, permutations = 9999
+    )
+  } else {
+    permanova <- adonis2(
+      model_formula, data = metadata, permutations = 9999,
+      strata = metadata[[strata_variable]]
+    )
+  }
+
+  r2 <- permanova$R2[1]
+  p_value <- permanova$`Pr(>F)`[1]
+  p_label <- ifelse(
+    p_value < 0.001, "<0.001",
+    format(round(p_value, 3), nsmall = 3)
+  )
+
+  p <- ggplot(
+    coordinates,
+    aes(
+      x = Axis.1, y = Axis.2,
+      colour = .data[[colour_variable]],
+      shape = .data[[shape_variable]]
+    )
+  ) +
+    geom_vline(xintercept = 0, colour = "grey80") +
+    geom_hline(yintercept = 0, colour = "grey80") +
+    geom_point(size = 2, alpha = 0.75) +
+    stat_ellipse(aes(group = .data[[colour_variable]]), linewidth = 0.55) +
+    labs(
+      x = paste0("PCoA 1 (", round(explained[1], 1), "%)"),
+      y = paste0("PCoA 2 (", round(explained[2], 1), "%)"),
+      title = site_title,
+      subtitle = metric_title,
+      colour = ifelse(
+        colour_variable == "subject_id", "Participant", "Sampling type"
+      ),
+      shape = ifelse(
+        shape_variable == "subject_id", "Participant", "Sampling type"
+      )
+    ) +
+    annotate(
+      "text", x = -Inf, y = -Inf, hjust = -0.10, vjust = -0.25, size = 2.7,
+      label = paste0(
+        "PERMANOVA:\nR2 = ", round(r2, 3),
+        ", p-value = ", p_label
+      )
+    ) +
+    theme_manuscript() +
+    theme(aspect.ratio = 1)
+
+  if (!show_legend) p <- p + theme(legend.position = "none")
+
+  list(
+    plot = p,
+    permanova = data.frame(
+      site = site_title,
+      distance = metric_title,
+      variable = test_variable,
+      R2 = r2,
+      F = permanova$F[1],
+      p_value = p_value
+    ),
+    coordinates = coordinates
+  )
+}
+
+taxa_plot <- function(melt, taxa, tax_otu, x_axis, phylum_or = NULL) {
+  # Original taxon grouping, ordering, and phylum-specific colour logic.
+  tax_tab <- unique(melt[, c("OTU", "Phylum", taxa)])
+  tax_tab2 <- tax_tab[tax_tab$OTU %in% tax_otu, ]
+  tax_phylum <- unique(tax_tab2$Phylum)
+
+  plot_data <- melt
+  plot_data[!plot_data$Phylum %in% tax_phylum, "Phylum"] <- "Other"
+  plot_data[!plot_data$Phylum %in% tax_phylum, taxa] <- "Other"
+
+  if (taxa != "Species") {
+    for (phylum in tax_phylum) {
+      selected_taxa <- tax_tab2[tax_tab2$Phylum == phylum, taxa]
+      plot_data[
+        plot_data$Phylum == phylum & !plot_data[, taxa] %in% selected_taxa,
+        taxa
+      ] <- paste0(phylum, "_Other")
+    }
+    for (phylum in tax_phylum) {
+      selected_taxa <- tax_tab2[tax_tab2$Phylum == phylum, taxa]
+      for (taxon in selected_taxa) {
+        plot_data[plot_data[, taxa] == taxon, taxa] <- paste0(phylum, "_", taxon)
+      }
+    }
+  } else {
+    for (phylum in tax_phylum) {
+      selected_taxa <- tax_tab2[tax_tab2$Phylum == phylum, taxa]
+      replace_rows <- plot_data$Phylum == phylum & !plot_data[, taxa] %in% selected_taxa
+      plot_data[replace_rows, taxa] <- "Other"
+      plot_data[replace_rows, "Phylum"] <- "Other"
+    }
+  }
+
+  abundance_summary <- plot_data[
+    plot_data$Phylum %in% tax_phylum,
+    c("Abundance", "Phylum", taxa)
+  ] %>%
+    group_by(Phylum, !!rlang::sym(taxa)) %>%
+    summarise(sum.Abundance = sum(Abundance), .groups = "drop") %>%
+    arrange(-sum.Abundance) %>%
+    ungroup() %>%
+    as.data.frame()
+
+  phylum_order <- unique(abundance_summary$Phylum)
+  plot_data$Phylum <- factor(plot_data$Phylum, levels = c(sort(phylum_order), "Other"))
+  taxon_order <- abundance_summary %>% arrange(Phylum) %>% pull(!!rlang::sym(taxa))
+  plot_data[, taxa] <- factor(plot_data[, taxa], levels = c(taxon_order, "Other"))
+
+  phylum_color_map <- c(
+    Actinobacteria = "Reds", Actinobacteriota = "Reds", Actinomycetota = "Reds",
+    Firmicutes = "Blues", Bacillota = "Blues", Firmicutes_A = "Blues",
+    Firmicutes_B = "BuGn", Firmicutes_C = "PuBu", Firmicutes_D = "YlGnBu",
+    Bacteroidetes = "Purples", Bacteroidota = "Purples",
+    Proteobacteria = "Greens", Pseudomonadota = "Greens",
+    Fusobacteria = "YlOrBr", Fusobacteriota = "YlOrBr",
+    Ascomycota = "RdPu", Basidiomycota = "YlOrBr"
+  )
+  other_palettes <- c("BrBG", "Spectral", "BrBG", "PuOr")
+  categories <- abundance_summary %>%
+    arrange(-sum.Abundance) %>% arrange(Phylum) %>% count(Phylum, name = "n_taxa")
+  unlisted_phyla <- setdiff(categories$Phylum, names(phylum_color_map))
+  if (length(unlisted_phyla) > 0) {
+    phylum_color_map <- c(
+      phylum_color_map,
+      setNames(rep(other_palettes, length.out = length(unlisted_phyla)), unlisted_phyla)
+    )
+  }
+
+  colour_list <- vector("list", nrow(categories))
+  names(colour_list) <- categories$Phylum
+  for (phylum in categories$Phylum) {
+    n_taxa <- categories$n_taxa[categories$Phylum == phylum]
+    palette_name <- phylum_color_map[[phylum]]
+    if (n_taxa == 1) {
+      colour_list[[phylum]] <- rev(brewer.pal(9, palette_name)[5])
+    } else if (n_taxa == 2) {
+      colour_list[[phylum]] <- rev(brewer.pal(9, palette_name)[c(3, 7)])
+    } else if (n_taxa <= 9) {
+      colour_list[[phylum]] <- rev(brewer.pal(n_taxa, palette_name))
+    } else {
+      colour_list[[phylum]] <- colorRampPalette(rev(brewer.pal(9, palette_name)))(n_taxa)
+    }
+  }
+  colour_code <- c(unlist(colour_list, use.names = FALSE), "#D3D3D3")
+
+  if (!is.null(phylum_or)) {
+    sample_order <- plot_data %>%
+      group_by(!!rlang::sym(x_axis)) %>% data.frame() %>%
+      mutate(Abundance = Abundance / sum(Abundance)) %>%
+      filter(Phylum %in% phylum_or) %>%
+      group_by(!!rlang::sym(x_axis)) %>%
+      summarise(Abundance = sum(Abundance), .groups = "drop") %>%
+      arrange(Abundance) %>% pull(!!rlang::sym(x_axis)) %>% as.character()
+    plot_data[, x_axis] <- factor(plot_data[, x_axis], levels = sample_order)
+  }
+
+  p <- ggplot(
+    plot_data,
+    aes(x = !!rlang::sym(x_axis), y = Abundance, fill = !!rlang::sym(taxa))
+  ) +
+    geom_bar(stat = "identity", position = "fill") +
+    labs(y = "Relative abundance") +
+    scale_fill_manual(values = colour_code) +
+    theme_manuscript() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title = element_blank())
+
+  list(
+    plot = p,
+    data = list(df = plot_data, summary_df = abundance_summary),
+    color = colour_code
+  )
+}
+
+prepare_upset_data <- function(ps, site = NULL, mean_abundance_cutoff = 0.001) {
+  ps_genus <- tax_glom(ps, taxrank = "Genus", NArm = FALSE)
+  if (!is.null(site)) {
+    keep <- sample_names(ps_genus)[
+      as.character(sample_data(ps_genus)$site_group) == site
+    ]
+    ps_genus <- prune_samples(keep, ps_genus)
+  }
+  ps_genus <- prune_taxa(taxa_sums(ps_genus) > 0, ps_genus)
+
+  ps_relative <- transform_sample_counts(ps_genus, function(x) x / sum(x))
+  mean_relative <- taxa_sums(ps_relative) / nsamples(ps_relative)
+  keep_taxa <- taxa_names(ps_relative)[mean_relative >= mean_abundance_cutoff]
+  ps_genus <- prune_taxa(keep_taxa, ps_genus)
+
+  metadata <- data.frame(sample_data(ps_genus), check.names = FALSE)
+  otu <- as(otu_table(ps_genus), "matrix")
+  if (!taxa_are_rows(ps_genus)) otu <- t(otu)
+
+  presence <- sapply(swab_key$swab_type2, function(system) {
+    samples <- rownames(metadata)[metadata$swab_type2 == system]
+    rowSums(otu[, samples, drop = FALSE] > 0) > 0
+  })
+  presence <- data.frame(presence, check.names = FALSE)
+  colnames(presence) <- as.character(swab_key$Type)
+  presence$taxon_id <- rownames(presence)
+  presence$Genus <- as.character(tax_table(ps_genus)[presence$taxon_id, "Genus"])
+
+  system_columns <- paste0("Type ", 1:5)
+  shared_ids <- presence$taxon_id[
+    rowSums(presence[, system_columns, drop = FALSE]) == 5
+  ]
+  total_reads <- sum(otu)
+  shared_reads <- sum(otu[shared_ids, , drop = FALSE])
+
+  list(
+    data = presence,
+    summary = data.frame(
+      subset = ifelse(is.null(site), "Total", site),
+      retained_genera = nrow(presence),
+      shared_by_all_five_genera = length(shared_ids),
+      mean_abundance_cutoff = mean_abundance_cutoff,
+      total_reads = total_reads,
+      reads_from_shared_genera = shared_reads,
+      shared_genus_relative_abundance_pct = 100 * shared_reads / total_reads
+    )
+  )
+}
+
+upset_plot <- function(upset_data, title, unit_label = "genera") {
+  shared_label <- sprintf(
+    "%d shared genera (%.1f%% of reads)",
+    upset_data$summary$shared_by_all_five_genera,
+    upset_data$summary$shared_genus_relative_abundance_pct
+  )
+
+  p <- ComplexUpset::upset(
+    upset_data$data,
+    intersect = paste0("Type ", 1:5),
+    name = "Sampling system",
+    min_size = 0,
+    sort_sets = FALSE,
+    sort_intersections_by = "cardinality",
+    width_ratio = 0.2,
+    base_annotations = list(
+      "Intersection size" = intersection_size(
+        counts = TRUE,
+        bar_number_threshold = 1,
+        text_colors = c(on_background = "black", on_bar = "black"),
+        text_mapping = aes(
+          label = ifelse(
+            `Type 1` & `Type 2` & `Type 3` & `Type 4` & `Type 5`,
+            "",
+            exclusive_intersection_size
+          )
+        ),
+        # Keep every count horizontal and centred above its bar.
+        text = list(size = 3.3, angle = 0, hjust = 0.5, vjust = -0.65)
+      ) +
+        geom_text(
+          aes(
+            y = exclusive_intersection_size,
+            label = ifelse(
+              `Type 1` & `Type 2` & `Type 3` & `Type 4` & `Type 5`,
+              shared_label,
+              NA_character_
+            )
+          ),
+          stat = "unique", colour = "black", size = 3.3,
+          hjust = 0, vjust = -0.65, nudge_x = -0.45, na.rm = TRUE
+        ) +
+        scale_y_continuous(expand = expansion(mult = c(0, 0.30)))
+    )
+  )
+
+  p <- p +
+    labs(title = paste0(
+      title, " (n=", upset_data$summary$retained_genera, " ", unit_label, ")"
+    )) +
+    theme_bw(base_size = 8) +
+    theme(plot.title = element_text(face = "bold"), panel.grid = element_blank())
+  p$theme$axis.text.x <- element_text(angle = 45, hjust = 1, vjust = 1)
+  p
+}
+```
+
+# Import post-decontam phyloseq RDS and prepare analysis data
+
+```{r data-preprocessing, message=FALSE, warning=FALSE}
+# -----------------------------------------------------------------------------
+# 1. Start from the saved post-decontam phyloseq object
+# -----------------------------------------------------------------------------
+
+# This is the post-decontam RDS used as the starting point in the original Rmd.
+phy <- readRDS("./Phyloseq/phy_F270R240_260812_v4.rds")
+
+# Remove controls, then remove singleton ASVs (total abundance = 1)
+# across the 50 true samples, following the filtering sensitivity analysis.
+phy_true_unfiltered <- subset_samples(phy, control_status == "sample") %>%
+  prune_taxa(taxa_sums(.) > 0, .)
+
+phy <- prune_taxa(taxa_sums(phy_true_unfiltered) > 1, phy_true_unfiltered)
+
+filter_summary <- data.frame(
+  analysis = "canonical_singleton",
+  retention_rule = "taxa_sums > 1",
+  samples = nsamples(phy),
+  asvs_before_filter = ntaxa(phy_true_unfiltered),
+  asvs_after_filter = ntaxa(phy),
+  asvs_removed = ntaxa(phy_true_unfiltered) - ntaxa(phy),
+  reads_before_filter = sum(sample_sums(phy_true_unfiltered)),
+  reads_after_filter = sum(sample_sums(phy)),
+  reads_removed = sum(sample_sums(phy_true_unfiltered)) - sum(sample_sums(phy)),
+  reads_retained_pct = 100 * sum(sample_sums(phy)) / sum(sample_sums(phy_true_unfiltered))
+)
+
+# Rarefy the post-decontam sample object using the existing analysis settings.
+set.seed(42)
+phy_rar <- rarefy_even_depth(
+  phy,
+  sample.size = min(sample_sums(phy)),
+  rngseed = 42,
+  replace = FALSE,
+  verbose = FALSE
+)
+
+project_root <- sub("[/\\\\]+$", "", getwd())
+figure_dir <- file.path(project_root, "Figures")
+table_dir <- file.path(project_root, "Tables")
+dir.create(figure_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(table_dir, recursive = TRUE, showWarnings = FALSE)
+write.csv(filter_summary, file.path(table_dir, "feature_filter_summary.csv"), row.names = FALSE)
+
+swab_key <- data.frame(
+  swab_type2 = c("Copan", "Puritan_gel", "Puritan_buffer", "Omni", "Eswab"),
+  Type = factor(paste0("Type ", 1:5), levels = paste0("Type ", 1:5))
+)
+
+type_col <- setNames(brewer.pal(5, "Set2"), paste0("Type ", 1:5))
+subject_col <- setNames(
+  brewer.pal(5, "Set1"),
+  sort(unique(as.character(sample_data(phy)$subject_id)))
+)
+
+meta_rar <- data.frame(sample_data(phy_rar), check.names = FALSE)
+meta_rar$sample_name <- sample_names(phy_rar)
+meta_rar <- left_join(meta_rar, swab_key, by = "swab_type2")
+
+# -----------------------------------------------------------------------------
+```
+
+# Figure 1 — bacterial diversity across sampling systems
+
+```{r figure-1, message=FALSE, warning=FALSE}
+# 2. Figure 1: beta and alpha diversity across sampling systems
+# -----------------------------------------------------------------------------
+
+# 1. Data processing
+alpha_data <- estimate_richness(
+  phy_rar, measures = c("Shannon", "Observed")
+) %>%
+  rownames_to_column("sample_name") %>%
+  mutate(sample_name = sub("^X", "", sample_name)) %>%
+  left_join(meta_rar, by = "sample_name") %>%
+  pivot_longer(
+    c(Shannon, Observed),
+    names_to = "Index",
+    values_to = "Value"
+  ) %>%
+  mutate(
+    Index = factor(
+      Index,
+      levels = c("Shannon", "Observed"),
+      labels = c("Shannon index", "Observed ASVs")
+    )
+  )
+
+# 2. Beta-diversity statistics and plots
+f1_A_result <- beta_plot(
+  phy_rar, "Antecubital", "unifrac", "swab_type2",
+  "Type", "subject_id", "subject_id",
+  "Antecubital fossa", "Unweighted UniFrac", FALSE
+)
+f1_B_result <- beta_plot(
+  phy_rar, "Antecubital", "wunifrac", "swab_type2",
+  "Type", "subject_id", "subject_id",
+  "Antecubital fossa", "Weighted UniFrac", TRUE
+)
+f1_C_result <- beta_plot(
+  phy_rar, "Forehead", "unifrac", "swab_type2",
+  "Type", "subject_id", "subject_id",
+  "Forehead", "Unweighted UniFrac", FALSE
+)
+f1_D_result <- beta_plot(
+  phy_rar, "Forehead", "wunifrac", "swab_type2",
+  "Type", "subject_id", "subject_id",
+  "Forehead", "Weighted UniFrac", TRUE
+)
+
+f1_A <- f1_A_result$plot + scale_colour_manual(values = type_col, drop = FALSE)
+f1_B <- f1_B_result$plot + scale_colour_manual(values = type_col, drop = FALSE)
+f1_C <- f1_C_result$plot + scale_colour_manual(values = type_col, drop = FALSE)
+f1_D <- f1_D_result$plot + scale_colour_manual(values = type_col, drop = FALSE)
+
+Figure1_PERMANOVA <- bind_rows(
+  f1_A_result$permanova,
+  f1_B_result$permanova,
+  f1_C_result$permanova,
+  f1_D_result$permanova
+)
+
+# 3. Alpha-diversity plots
+f1_E <- alpha_plot(
+  filter(alpha_data, site_group == "Antecubital"),
+  x_var = "Type", fill_var = "Type", shape_var = "subject_id",
+  site_title = "Antecubital fossa", paired = TRUE
+) + scale_fill_manual(values = type_col, drop = FALSE)
+
+f1_F <- alpha_plot(
+  filter(alpha_data, site_group == "Forehead"),
+  x_var = "Type", fill_var = "Type", shape_var = "subject_id",
+  site_title = "Forehead", paired = TRUE
+) + scale_fill_manual(values = type_col, drop = FALSE)
+
+# 4. Assemble and inspect
+Figure1 <- (
+  wrap_elements(full = (f1_A | f1_B)) /
+    wrap_elements(full = (f1_C | f1_D)) /
+    (f1_E | f1_F)
+) +
+  plot_layout(heights = c(1, 1, 0.62)) +
+  plot_annotation(tag_levels = list(c("A", "B", "C", "D"))) &
+  theme(plot.tag = element_text(size = 16, face = "bold"))
+
+print(Figure1)
+print(Figure1_PERMANOVA)
+
+# 5. Save the inspected objects
+ggsave(
+  file.path(figure_dir, "Figure1_bacterial_diversity.png"),
+  plot = Figure1, width = 9, height = 10.2, dpi = 600,
+  bg = "white", limitsize = FALSE
+)
+ggsave(
+  file.path(figure_dir, "Figure1_bacterial_diversity.tiff"),
+  plot = Figure1, width = 9, height = 10.2, dpi = 600,
+  compression = "lzw", bg = "white", limitsize = FALSE
+)
+write.csv(
+  Figure1_PERMANOVA,
+  file.path(table_dir, "Figure1_PERMANOVA.csv"),
+  row.names = FALSE
+)
+
+```
+
+
+
+
+# Figure 2 — bacterial community composition
+
+```{r figure-2, message=FALSE, warning=FALSE}
+# 3. Figure 2: bacterial community composition
+# -----------------------------------------------------------------------------
+# 1. Data processing
+phy_genus <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+phy_genus_relative <- transform_sample_counts(phy_genus, function(x) x / sum(x))
+
+mean_genus_abundance <- taxa_sums(phy_genus_relative) / nsamples(phy_genus_relative)
+major_genus_ids <- names(mean_genus_abundance)[mean_genus_abundance > 0.01]
+
+genus_tax_plot <- taxa_plot(
+  melt = psmelt(phy_genus),
+  taxa = "Genus",
+  tax_otu = major_genus_ids,
+  x_axis = "swab_type2",
+  phylum_or = "Actinobacteriota"
+)
+
+genus_composition_data <- genus_tax_plot$data$df %>%
+  left_join(swab_key, by = "swab_type2")
+
+genus_relative_data <- psmelt(phy_genus_relative) %>%
+  left_join(swab_key, by = "swab_type2") %>%
+  mutate(Genus = as.character(Genus))
+
+selected_skin_genera <- c("Cutibacterium", "Staphylococcus", "Streptococcus")
+selected_genus_data <- genus_relative_data %>%
+  filter(Genus %in% selected_skin_genera)
+
+# 2. Visualisation
+f2_A <- ggplot(
+  filter(genus_composition_data, site_group == "Antecubital"),
+  aes(Type, Abundance, fill = Genus)
+) +
+  geom_col(position = "fill", width = 0.88) +
+  scale_fill_manual(values = genus_tax_plot$color) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) +
+  labs(x = NULL, y = "Antecubital relative abundance (%)", fill = "Genus", tag = "A") +
+  guides(fill = guide_legend(keyheight = unit(4.8, "mm"), keywidth = unit(7, "mm"))) +
+  theme_manuscript() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        legend.text = element_text(size = 6),
+        legend.key.height = unit(4.8, "mm"), legend.key.width = unit(7, "mm"),
+        plot.tag = element_text(size = 14, face = "bold"))
+
+f2_B <- ggplot(
+  filter(genus_composition_data, site_group == "Forehead"),
+  aes(Type, Abundance, fill = Genus)
+) +
+  geom_col(position = "fill", width = 0.88) +
+  scale_fill_manual(values = genus_tax_plot$color) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) +
+  labs(x = NULL, y = "Forehead relative abundance (%)", fill = "Genus", tag = "B") +
+  guides(fill = guide_legend(keyheight = unit(4.8, "mm"), keywidth = unit(7, "mm"))) +
+  theme_manuscript() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        legend.text = element_text(size = 6),
+        legend.key.height = unit(4.8, "mm"), legend.key.width = unit(7, "mm"),
+        plot.tag = element_text(size = 14, face = "bold"))
+
+f2_C <- ggplot(
+  filter(selected_genus_data, site_group == "Antecubital"),
+  aes(Type, Abundance * 100, fill = Type)
+) +
+  geom_boxplot(width = 0.68, outlier.shape = NA, colour = "black") +
+  geom_point(aes(shape = subject_id), colour = "black",
+             position = position_jitter(width = 0.08), size = 1.5) +
+  facet_wrap(~Genus, nrow = 1, scales = "free_y") +
+  scale_fill_manual(values = type_col, drop = FALSE) +
+  labs(x = "Type", y = "Antecubital relative abundance (%)",
+       fill = "Sampling type", shape = "Participant", tag = "C") +
+  theme_manuscript() +
+  theme(strip.text = element_text(face = "italic"), legend.position = "none",
+        plot.tag = element_text(size = 14, face = "bold"))
+
+f2_D <- ggplot(
+  filter(selected_genus_data, site_group == "Forehead"),
+  aes(Type, Abundance * 100, fill = Type)
+) +
+  geom_boxplot(width = 0.68, outlier.shape = NA, colour = "black") +
+  geom_point(aes(shape = subject_id), colour = "black",
+             position = position_jitter(width = 0.08), size = 1.5) +
+  facet_wrap(~Genus, nrow = 1, scales = "free_y") +
+  scale_fill_manual(values = type_col, drop = FALSE) +
+  labs(x = "Type", y = "Forehead relative abundance (%)",
+       fill = "Sampling type", shape = "Participant", tag = "D") +
+  theme_manuscript() +
+  theme(strip.text = element_text(face = "italic"), legend.position = "bottom",
+        plot.tag = element_text(size = 14, face = "bold"))
+
+# 3. Assemble and inspect
+Figure2 <- (
+  (f2_A | f2_B) /
+    wrap_elements(full = f2_C) /
+    wrap_elements(full = f2_D)
+)
+
+print(Figure2)
+print(genus_composition_data)
+print(selected_genus_data)
+
+# 4. Save the inspected objects
+ggsave(
+  file.path(figure_dir, "Figure2_bacterial_community_composition.png"),
+  plot = Figure2, width = 8, height = 8.8, dpi = 600,
+  bg = "white", limitsize = FALSE
+)
+ggsave(
+  file.path(figure_dir, "Figure2_bacterial_community_composition.tiff"),
+  plot = Figure2, width = 8, height = 8.8, dpi = 600,
+  compression = "lzw", bg = "white", limitsize = FALSE
+)
+write.csv(
+  genus_composition_data,
+  file.path(table_dir, "Figure2_genus_composition_data.csv"),
+  row.names = FALSE
+)
+write.csv(
+  selected_genus_data,
+  file.path(table_dir, "Figure2_selected_genus_boxplot_data.csv"),
+  row.names = FALSE
+)
+
+```
+
+# Figure 3 — shared genera across sampling systems
+
+```{r figure-3, message=FALSE, warning=FALSE}
+# Generate two directly comparable three-panel figures:
+# (1) no mean-abundance filtering and (2) mean abundance >=0.1%.
+
+# 1. Data processing
+upset_total_unfiltered <- prepare_upset_data(
+  phy, site = NULL, mean_abundance_cutoff = 0
+)
+upset_antecubital_unfiltered <- prepare_upset_data(
+  phy, site = "Antecubital", mean_abundance_cutoff = 0
+)
+upset_forehead_unfiltered <- prepare_upset_data(
+  phy, site = "Forehead", mean_abundance_cutoff = 0
+)
+
+upset_total_filtered <- prepare_upset_data(
+  phy, site = NULL, mean_abundance_cutoff = 0.001
+)
+upset_antecubital_filtered <- prepare_upset_data(
+  phy, site = "Antecubital", mean_abundance_cutoff = 0.001
+)
+upset_forehead_filtered <- prepare_upset_data(
+  phy, site = "Forehead", mean_abundance_cutoff = 0.001
+)
+
+Figure3_summary <- bind_rows(
+  mutate(upset_total_unfiltered$summary, filtering = "No abundance filtering"),
+  mutate(upset_antecubital_unfiltered$summary, filtering = "No abundance filtering"),
+  mutate(upset_forehead_unfiltered$summary, filtering = "No abundance filtering"),
+  mutate(upset_total_filtered$summary, filtering = "Mean abundance >=0.1%"),
+  mutate(upset_antecubital_filtered$summary, filtering = "Mean abundance >=0.1%"),
+  mutate(upset_forehead_filtered$summary, filtering = "Mean abundance >=0.1%")
+) %>%
+  mutate(
+    subset = recode(
+      subset,
+      Antecubital = "Antecubital fossa"
+    )
+  )
+
+Figure3_membership <- bind_rows(
+  mutate(upset_total_unfiltered$data, subset = "Total", filtering = "No abundance filtering"),
+  mutate(upset_antecubital_unfiltered$data, subset = "Antecubital fossa", filtering = "No abundance filtering"),
+  mutate(upset_forehead_unfiltered$data, subset = "Forehead", filtering = "No abundance filtering"),
+  mutate(upset_total_filtered$data, subset = "Total", filtering = "Mean abundance >=0.1%"),
+  mutate(upset_antecubital_filtered$data, subset = "Antecubital fossa", filtering = "Mean abundance >=0.1%"),
+  mutate(upset_forehead_filtered$data, subset = "Forehead", filtering = "Mean abundance >=0.1%")
+)
+
+# 2. Visualisation
+Figure3_unfiltered <- (
+  wrap_elements(full = upset_plot(upset_total_unfiltered, "Total", "genera")) /
+    wrap_elements(full = upset_plot(upset_antecubital_unfiltered, "Antecubital fossa", "genera")) /
+    wrap_elements(full = upset_plot(upset_forehead_unfiltered, "Forehead", "genera"))
+) +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(size = 14, face = "bold"))
+
+Figure3_filtered <- (
+  wrap_elements(full = upset_plot(upset_total_filtered, "Total", "genera")) /
+    wrap_elements(full = upset_plot(upset_antecubital_filtered, "Antecubital fossa", "genera")) /
+    wrap_elements(full = upset_plot(upset_forehead_filtered, "Forehead", "genera"))
+) +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(size = 14, face = "bold"))
+
+# 3. Inspect
+print(Figure3_unfiltered)
+print(Figure3_filtered)
+print(Figure3_summary)
+print(Figure3_membership)
+
+# 4. Save the inspected objects
+png(
+  file.path(figure_dir, "Figure3_UpSet_Genus_unfiltered.png"),
+  width = 7.5, height = 11.5, units = "in", res = 600, bg = "white"
+)
+print(Figure3_unfiltered)
+dev.off()
+
+png(
+  file.path(figure_dir, "Figure3_UpSet_Genus_0.1pct.png"),
+  width = 7.5, height = 11.5, units = "in", res = 600, bg = "white"
+)
+print(Figure3_filtered)
+dev.off()
+
+tiff(
+  file.path(figure_dir, "Figure3_UpSet_Genus_unfiltered.tiff"),
+  width = 7.5, height = 11.5, units = "in", res = 600,
+  compression = "lzw", bg = "white"
+)
+print(Figure3_unfiltered)
+dev.off()
+
+tiff(
+  file.path(figure_dir, "Figure3_UpSet_Genus_0.1pct.tiff"),
+  width = 7.5, height = 11.5, units = "in", res = 600,
+  compression = "lzw", bg = "white"
+)
+print(Figure3_filtered)
+dev.off()
+
+write.csv(
+  Figure3_summary,
+  file.path(table_dir, "Figure3_Genus_shared_all_five_summary.csv"),
+  row.names = FALSE
+)
+write.csv(
+  Figure3_membership,
+  file.path(table_dir, "Figure3_Genus_membership.csv"),
+  row.names = FALSE
+)
+
+```
+
+# Figure S1 — participant-level taxonomic composition
+
+```{r figure-s1, message=FALSE, warning=FALSE}
+# 5. Figure S1: participant-level composition at three taxonomic ranks
+# -----------------------------------------------------------------------------
+
+# Genus and Species use the existing taxa_plot() function directly so the
+# phylum-specific palette and Other grouping exactly follow functions.R.
+# 1. Data processing
+composition_ranks <- c("Phylum", "Genus", "Species")
+participant_composition <- list()
+participant_colours <- list()
+major_taxa_by_rank <- list()
+
+# Phylum panel: one colour from the same phylum palettes used by taxa_plot().
+phy_phylum <- tax_glom(phy, taxrank = "Phylum", NArm = FALSE)
+phy_phylum_relative <- transform_sample_counts(phy_phylum, function(x) x / sum(x))
+major_phylum_ids <- taxa_names(phy_phylum_relative)[
+  taxa_sums(phy_phylum_relative) / nsamples(phy_phylum_relative) > 0.01
+]
+phylum_data <- psmelt(phy_phylum) %>%
+  mutate(Phylum = ifelse(OTU %in% major_phylum_ids, as.character(Phylum), "Other")) %>%
+  left_join(swab_key, by = "swab_type2")
+phylum_palette_name <- c(
+  Actinobacteriota = "Reds", Actinomycetota = "Reds",
+  Firmicutes = "Blues", Bacillota = "Blues",
+  Bacteroidota = "Purples", Proteobacteria = "Greens",
+  Pseudomonadota = "Greens", Fusobacteriota = "YlOrBr"
+)
+major_phyla <- setdiff(sort(unique(phylum_data$Phylum)), "Other")
+phylum_colours <- setNames(vapply(major_phyla, function(phylum) {
+  palette_name <- if (phylum %in% names(phylum_palette_name)) {
+    phylum_palette_name[[phylum]]
+  } else {
+    "BrBG"
+  }
+  rev(brewer.pal(9, palette_name))[5]
+}, character(1)), major_phyla)
+phylum_colours <- c(phylum_colours, Other = "#D3D3D3")
+phylum_data$Phylum <- factor(phylum_data$Phylum, levels = names(phylum_colours))
+
+# Genus and Species panels use the original taxa_plot() result directly.
+phy_genus_s1 <- tax_glom(phy, taxrank = "Genus", NArm = FALSE)
+phy_genus_s1_relative <- transform_sample_counts(phy_genus_s1, function(x) x / sum(x))
+major_genus_s1_ids <- taxa_names(phy_genus_s1_relative)[
+  taxa_sums(phy_genus_s1_relative) / nsamples(phy_genus_s1_relative) > 0.01
+]
+genus_s1 <- taxa_plot(
+  psmelt(phy_genus_s1), "Genus", major_genus_s1_ids,
+  "swab_type2", "Actinobacteriota"
+)
+genus_s1_data <- genus_s1$data$df %>% left_join(swab_key, by = "swab_type2")
+
+phy_species_s1 <- tax_glom(phy, taxrank = "Species", NArm = FALSE)
+phy_species_s1_relative <- transform_sample_counts(phy_species_s1, function(x) x / sum(x))
+major_species_s1_ids <- taxa_names(phy_species_s1_relative)[
+  taxa_sums(phy_species_s1_relative) / nsamples(phy_species_s1_relative) > 0.01
+]
+species_s1 <- taxa_plot(
+  psmelt(phy_species_s1), "Species", major_species_s1_ids,
+  "swab_type2", "Actinobacteriota"
+)
+species_s1_data <- species_s1$data$df %>% left_join(swab_key, by = "swab_type2")
+
+participant_composition <- list(
+  Phylum = phylum_data, Genus = genus_s1_data, Species = species_s1_data
+)
+participant_colours <- list(
+  Phylum = phylum_colours, Genus = genus_s1$color, Species = species_s1$color
+)
+major_taxa_by_rank <- list(
+  Phylum = unique(as.character(tax_table(phy_phylum)[major_phylum_ids, "Phylum"])),
+  Genus = unique(as.character(tax_table(phy_genus_s1)[major_genus_s1_ids, "Genus"])),
+  Species = unique(as.character(tax_table(phy_species_s1)[major_species_s1_ids, "Species"]))
+)
+
+# 2. Visualisation
+s1_A <- ggplot(phylum_data, aes(Type, Abundance, fill = Phylum)) +
+  geom_col(position = "fill", width = 0.92) +
+  facet_grid(site_group ~ subject_id) +
+  scale_fill_manual(values = phylum_colours, drop = FALSE) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) +
+  labs(x = NULL, y = "Relative abundance (%)", fill = "Phylum") +
+  theme_manuscript(base_size = 7) +
+  theme(axis.text.x = element_text(size = 6),
+        strip.background = element_rect(fill = "white", colour = "black"),
+        legend.text = element_text(size = 6))
+
+s1_B <- ggplot(genus_s1_data, aes(Type, Abundance, fill = Genus)) +
+  geom_col(position = "fill", width = 0.92) +
+  facet_grid(site_group ~ subject_id) +
+  scale_fill_manual(values = genus_s1$color, drop = FALSE) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) +
+  labs(x = NULL, y = "Relative abundance (%)", fill = "Genus") +
+  theme_manuscript(base_size = 7) +
+  theme(axis.text.x = element_text(size = 6),
+        strip.background = element_rect(fill = "white", colour = "black"),
+        legend.text = element_text(size = 6))
+
+s1_C <- ggplot(species_s1_data, aes(Type, Abundance, fill = Species)) +
+  geom_col(position = "fill", width = 0.92) +
+  facet_grid(site_group ~ subject_id) +
+  scale_fill_manual(values = species_s1$color, drop = FALSE) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) +
+  labs(x = NULL, y = "Relative abundance (%)", fill = "Species") +
+  theme_manuscript(base_size = 7) +
+  theme(axis.text.x = element_text(size = 6),
+        strip.background = element_rect(fill = "white", colour = "black"),
+        legend.text = element_text(size = 6))
+
+FigureS1 <- (s1_A / s1_B / s1_C) +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(size = 16, face = "bold"))
+
+# 3. Inspect
+print(FigureS1)
+print(major_taxa_by_rank)
+
+# 4. Save the inspected object
+ggsave(
+  file.path(figure_dir, "FigureS1_participant_composition.png"),
+  plot = FigureS1, width = 10.7, height = 10.8, dpi = 600,
+  bg = "white", limitsize = FALSE
+)
+ggsave(
+  file.path(figure_dir, "FigureS1_participant_composition.tiff"),
+  plot = FigureS1, width = 10.7, height = 10.8, dpi = 600,
+  compression = "lzw", bg = "white", limitsize = FALSE
+)
+
+```
+
+# Figure S2 — UniFrac distance clustering
+
+```{r tables-s3-s6, message=FALSE, warning=FALSE}
+# Tables S3-S6 use the same taxa as Figure S1: global mean relative abundance >1%.
+# "Others" is included in composition tables only, not in pairwise testing.
+# 1. Data processing
+type_levels <- paste0("Type ", 1:5)
+type_columns <- paste0("Type", 1:5)
+rank_relative_data <- list()
+
+for (rank in composition_ranks) {
+  ps_rank <- tax_glom(phy, taxrank = rank, NArm = FALSE)
+  ps_rank <- transform_sample_counts(ps_rank, function(x) x / sum(x))
+  rank_data <- psmelt(ps_rank) %>%
+    left_join(swab_key, by = "swab_type2") %>%
+    transmute(
+      Sample,
+      subject_id,
+      site_group,
+      Type,
+      Rank = rank,
+      Taxa = as.character(.data[[rank]]),
+      Abundance = Abundance * 100
+    )
+  rank_relative_data[[rank]] <- rank_data
+}
+relative_long <- bind_rows(rank_relative_data)
+
+# 2. Relative-abundance tables
+relative_tables <- list()
+pairwise_tables <- list()
+comparisons <- combn(type_levels, 2, simplify = FALSE)
+
+for (site in c("Antecubital", "Forehead")) {
+  site_rows <- list()
+
+  for (rank in composition_ranks) {
+    selected_taxa <- major_taxa_by_rank[[rank]]
+    current <- relative_long %>%
+      filter(site_group == site, Rank == rank)
+
+    selected <- current %>%
+      filter(Taxa %in% selected_taxa) %>%
+      group_by(Rank, Taxa, Type) %>%
+      summarise(Relative_abundance = mean(Abundance), .groups = "drop")
+
+    others <- current %>%
+      group_by(Rank, Sample, Type) %>%
+      summarise(
+        Relative_abundance = 100 - sum(Abundance[Taxa %in% selected_taxa]),
+        .groups = "drop"
+      ) %>%
+      group_by(Rank, Type) %>%
+      summarise(Relative_abundance = mean(Relative_abundance), .groups = "drop") %>%
+      mutate(Taxa = "Others")
+
+    site_rows[[rank]] <- bind_rows(selected, others)
+  }
+
+  relative_tables[[site]] <- bind_rows(site_rows) %>%
+    mutate(Type = gsub(" ", "", as.character(Type))) %>%
+    pivot_wider(
+      names_from = Type,
+      values_from = Relative_abundance,
+      values_fill = 0
+    ) %>%
+    mutate(Average = rowMeans(across(all_of(type_columns)))) %>%
+    arrange(factor(Rank, levels = composition_ranks), desc(Average)) %>%
+    mutate(across(where(is.numeric), ~round(.x, 2)))
+
+  # 3. Paired taxon comparisons
+  test_data <- relative_long %>%
+    filter(
+      site_group == site,
+      Taxa %in% unlist(major_taxa_by_rank, use.names = FALSE)
+    )
+
+  test_rows <- list()
+  row_index <- 1
+
+  for (rank in composition_ranks) {
+    rank_taxa <- major_taxa_by_rank[[rank]]
+
+    for (taxon in rank_taxa) {
+      current <- test_data %>%
+        filter(Rank == rank, Taxa == taxon)
+
+      result_row <- data.frame(Rank = rank, Taxa = taxon)
+
+      for (comparison in comparisons) {
+        paired_data <- current %>%
+          filter(Type %in% comparison) %>%
+          select(subject_id, Type, Abundance) %>%
+          distinct() %>%
+          pivot_wider(names_from = Type, values_from = Abundance)
+
+        p_value <- NA_real_
+        if (
+          all(comparison %in% colnames(paired_data)) &&
+          nrow(paired_data) > 1
+        ) {
+          differences <- paired_data[[comparison[1]]] -
+            paired_data[[comparison[2]]]
+          if (any(is.finite(differences)) && any(differences != 0, na.rm = TRUE)) {
+            p_value <- tryCatch(
+              wilcox.test(
+                paired_data[[comparison[1]]],
+                paired_data[[comparison[2]]],
+                paired = TRUE,
+                exact = FALSE
+              )$p.value,
+              error = function(e) NA_real_
+            )
+          }
+        }
+
+        column_name <- paste(comparison, collapse = " vs ")
+        result_row[[column_name]] <- p_value
+      }
+
+      test_rows[[row_index]] <- result_row
+      row_index <- row_index + 1
+    }
+  }
+
+  pairwise_tables[[site]] <- bind_rows(test_rows) %>%
+    mutate(
+      across(
+        -c(Rank, Taxa),
+        ~p.adjust(.x, method = "BH")
+      )
+    ) %>%
+    mutate(across(where(is.numeric), ~round(.x, 3)))
+}
+
+TableS3 <- relative_tables$Antecubital
+TableS4 <- relative_tables$Forehead
+TableS5 <- pairwise_tables$Antecubital
+TableS6 <- pairwise_tables$Forehead
+
+# 4. Inspect
+print(TableS3)
+print(TableS4)
+print(TableS5)
+print(TableS6)
+
+# 5. Save the inspected tables
+write.csv(
+  TableS3,
+  file.path(table_dir, "TableS3_Antecubital_relative_abundance_taxa_over_1pct.csv"),
+  row.names = FALSE, na = "N/A"
+)
+write.csv(
+  TableS4,
+  file.path(table_dir, "TableS4_Forehead_relative_abundance_taxa_over_1pct.csv"),
+  row.names = FALSE, na = "N/A"
+)
+write.csv(
+  TableS5,
+  file.path(table_dir, "TableS5_Antecubital_pairwise_taxa_over_1pct.csv"),
+  row.names = FALSE, na = "N/A"
+)
+write.csv(
+  TableS6,
+  file.path(table_dir, "TableS6_Forehead_pairwise_taxa_over_1pct.csv"),
+  row.names = FALSE, na = "N/A"
+)
+
+```
+
+```{r figure-s2, message=FALSE, warning=FALSE}
+# 6. Figure S2: distance heatmaps by site
+# -----------------------------------------------------------------------------
+
+subject_annotation_col <- subject_col
+swab_annotation_col <- type_col
+
+# 1. Data processing and heatmap construction
+heatmap_settings <- data.frame(
+  panel = c("A", "B", "C", "D"),
+  site = c("Antecubital", "Antecubital", "Forehead", "Forehead"),
+  method = c("unifrac", "wunifrac", "unifrac", "wunifrac"),
+  title = c(
+    "Antecubital Unweighted UniFrac",
+    "Antecubital Weighted UniFrac",
+    "Forehead Unweighted UniFrac",
+    "Forehead Weighted UniFrac"
+  )
+)
+
+heatmap_panels <- list()
+
+for (i in seq_len(nrow(heatmap_settings))) {
+  current <- heatmap_settings[i, ]
+  keep <- sample_names(phy_rar)[
+    as.character(sample_data(phy_rar)$site_group) == current$site
+  ]
+  ps_site <- prune_samples(keep, phy_rar)
+  ps_site <- prune_taxa(taxa_sums(ps_site) > 0, ps_site)
+
+  distance_matrix <- as.matrix(
+    phyloseq::distance(ps_site, method = current$method)
+  )
+  metadata <- data.frame(sample_data(ps_site), check.names = FALSE) %>%
+    rownames_to_column("sample_name") %>%
+    left_join(swab_key, by = "swab_type2")
+
+  annotation <- data.frame(
+    Subject = metadata$subject_id,
+    Swab_type = metadata$Type
+  )
+  rownames(annotation) <- metadata$sample_name
+
+  heatmap_panels[[current$panel]] <- wrap_elements(
+    full = pheatmap(
+      distance_matrix,
+      silent = TRUE,
+      clustering_method = "complete",
+      annotation_col = annotation,
+      annotation_row = annotation,
+      annotation_colors = list(
+        Subject = subject_col,
+        Swab_type = type_col
+      ),
+      show_rownames = TRUE,
+      show_colnames = TRUE,
+      fontsize = 6,
+      border_color = NA,
+      main = current$title
+    )$gtable
+  )
+}
+
+# 2. Assemble and inspect
+FigureS2 <- (
+  (heatmap_panels$A | heatmap_panels$B) /
+    (heatmap_panels$C | heatmap_panels$D)
+) +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(size = 16, face = "bold"))
+
+print(FigureS2)
+
+# 3. Save the inspected object
+ggsave(
+  file.path(figure_dir, "FigureS2_UniFrac_heatmaps.png"),
+  plot = FigureS2, width = 10.5, height = 8.5, dpi = 600,
+  bg = "white", limitsize = FALSE
+)
+ggsave(
+  file.path(figure_dir, "FigureS2_UniFrac_heatmaps.tiff"),
+  plot = FigureS2, width = 10.5, height = 8.5, dpi = 600,
+  compression = "lzw", bg = "white", limitsize = FALSE
+)
+
+```
+
+# Figure S3 — participant-level alpha and beta diversity
+
+```{r figure-s3, message=FALSE, warning=FALSE}
+# 7. Figure S3: participant-level alpha and beta diversity
+# -----------------------------------------------------------------------------
+
+# 1. Data processing
+alpha_s3 <- estimate_richness(
+  phy_rar, measures = c("Shannon", "Observed")
+) %>%
+  rownames_to_column("sample_name") %>%
+  mutate(sample_name = sub("^X", "", sample_name)) %>%
+  left_join(meta_rar, by = "sample_name") %>%
+  pivot_longer(
+    c(Shannon, Observed),
+    names_to = "Index",
+    values_to = "Value"
+  ) %>%
+  mutate(
+    Index = factor(
+      Index,
+      levels = c("Shannon", "Observed"),
+      labels = c("Shannon index", "Observed ASVs")
+    )
+  )
+
+FigureS3_alpha_statistics <- ggpubr::compare_means(
+  Value ~ subject_id,
+  data = alpha_s3,
+  group.by = c("site_group", "Index"),
+  method = "wilcox.test",
+  p.adjust.method = "BH"
+)
+
+# 2. Alpha-diversity plots
+s3_A <- alpha_plot(
+  filter(alpha_s3, site_group == "Antecubital"),
+  x_var = "subject_id",
+  fill_var = "subject_id",
+  shape_var = "Type",
+  site_title = "Antecubital fossa",
+  y_title = "Alpha diversity",
+  paired = FALSE,
+  show_legend = TRUE
+) + scale_fill_manual(values = subject_col, drop = FALSE)
+
+s3_B <- alpha_plot(
+  filter(alpha_s3, site_group == "Forehead"),
+  x_var = "subject_id",
+  fill_var = "subject_id",
+  shape_var = "Type",
+  site_title = "Forehead",
+  y_title = "Alpha diversity",
+  paired = FALSE,
+  show_legend = FALSE
+) + scale_fill_manual(values = subject_col, drop = FALSE)
+
+# 3. Beta-diversity statistics and plots
+s3_C_result <- beta_plot(
+  phy_rar, "Antecubital", "unifrac", "subject_id",
+  "subject_id", "Type", NULL,
+  "Antecubital fossa", "Unweighted UniFrac", FALSE
+)
+s3_D_result <- beta_plot(
+  phy_rar, "Antecubital", "wunifrac", "subject_id",
+  "subject_id", "Type", NULL,
+  "Antecubital fossa", "Weighted UniFrac", TRUE
+)
+s3_E_result <- beta_plot(
+  phy_rar, "Forehead", "unifrac", "subject_id",
+  "subject_id", "Type", NULL,
+  "Forehead", "Unweighted UniFrac", FALSE
+)
+s3_F_result <- beta_plot(
+  phy_rar, "Forehead", "wunifrac", "subject_id",
+  "subject_id", "Type", NULL,
+  "Forehead", "Weighted UniFrac", TRUE
+)
+
+s3_C <- s3_C_result$plot +
+  scale_colour_manual(values = subject_col, drop = FALSE)
+s3_D <- s3_D_result$plot +
+  scale_colour_manual(values = subject_col, drop = FALSE)
+s3_E <- s3_E_result$plot +
+  scale_colour_manual(values = subject_col, drop = FALSE)
+s3_F <- s3_F_result$plot +
+  scale_colour_manual(values = subject_col, drop = FALSE)
+
+FigureS3_PERMANOVA <- bind_rows(
+  s3_C_result$permanova,
+  s3_D_result$permanova,
+  s3_E_result$permanova,
+  s3_F_result$permanova
+)
+
+# 4. Assemble and inspect
+FigureS3 <- (
+  wrap_elements(full = (s3_A | s3_B)) /
+    wrap_elements(full = (s3_C | s3_D)) /
+    wrap_elements(full = (s3_E | s3_F))
+) +
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(size = 16, face = "bold"))
+
+print(FigureS3)
+print(FigureS3_alpha_statistics)
+print(FigureS3_PERMANOVA)
+
+# 5. Save the inspected objects
+ggsave(
+  file.path(figure_dir, "FigureS3_participant_alpha_beta.png"),
+  plot = FigureS3, width = 10, height = 10, dpi = 600,
+  bg = "white", limitsize = FALSE
+)
+ggsave(
+  file.path(figure_dir, "FigureS3_participant_alpha_beta.tiff"),
+  plot = FigureS3, width = 10, height = 10, dpi = 600,
+  compression = "lzw", bg = "white", limitsize = FALSE
+)
+write.csv(
+  FigureS3_alpha_statistics,
+  file.path(table_dir, "FigureS3_alpha_pairwise_Wilcoxon_BH.csv"),
+  row.names = FALSE
+)
+write.csv(
+  FigureS3_PERMANOVA,
+  file.path(table_dir, "FigureS3_PERMANOVA.csv"),
+  row.names = FALSE
+)
+write.csv(
+  swab_key,
+  file.path(table_dir, "Swab_type_key.csv"),
+  row.names = FALSE
+)
+
+```
+
+# Final figure preview
+
+```{r final-figure-preview, echo=FALSE, message=FALSE, warning=FALSE}
+final_png <- c(
+  "Figure1_bacterial_diversity.png",
+  "Figure2_bacterial_community_composition.png",
+  "Figure3_UpSet_Genus_0.1pct.png",
+  "FigureS1_participant_composition.png",
+  "FigureS2_UniFrac_heatmaps.png",
+  "FigureS3_participant_alpha_beta.png"
+)
+knitr::include_graphics(file.path(figure_dir, final_png))
+```
+
+# Table 3. PERMANOVA results for bacterial community variation based on weighted UniFrac distance (9,999 permutations). 
+
+```{r}
+# Fri Aug 14 10:51:08 2026 ------------------------------
+
+
+set.seed(42)
+dist <- phyloseq::distance(phy_rar, method = "wunifrac")
+dist2 <- phyloseq::distance(phy_rar, method = "unifrac")
+meta   <- phy_rar %>% sample_data() %>% data.frame()
+
+meta$swab_type
+
+meta2 <- meta %>% 
+  mutate(
+    `Collection_medium` = case_when(
+      swab_type2 %in% c("Puritan_gel", "Copan") ~  "Gel",
+      swab_type2 %in% "Puritan_buffer" ~ "buffer",
+      swab_type2 %in% "Omni" ~ "Omni_buffer",
+      swab_type2 %in% "Eswab" ~ "Eswab_buffer"
+      ),
+    `Swab_material` = case_when(
+      swab_type %in%  "Eswab" ~  "Nylon",
+      swab_type %in%  "Omni" ~ "Polyester",
+      swab_type %in% "Puritan" ~ "Polyurethane foam",
+      swab_type %in% "Copan" ~"Rayon"
+      )
+    )      
+
+```
+
+
+```{r}
+# # PERMANOVA
+# set.seed(42)
+# Perm1    <- adonis2(
+#   dist ~ subject_id + swab_type2 + site_group + Collection_medium + Swab_material,
+#   data         = meta2,
+#   permutations = 9999,
+#   # strata = meta2$SubjectID,
+#   by ="margin"
+# ) 
+# 
+# set.seed(42)
+# 
+# Perm <- adonis2(
+#   dist ~ subject_id + swab_type2 + site_group +  Collection_medium + Swab_material,
+#   data = meta2,
+#   permutations = 9999,
+#   strata = meta2$SubjectID,
+#   by = "terms"
+# )
+# 
+# 
+# set.seed(42)
+# Perm2    <- adonis2(
+#   dist ~ subject_id + swab_type2 + site_group + Collection_medium + Swab_material,
+#   data         = meta2,
+#   permutations = 9999,
+#   # strata = meta2$SubjectID,
+#   # by ="margin"
+#     by = "terms"
+# ) 
+#  
+```
+
+
+```{r}
+
+
+
+
+# collection medium만
+df5 <-adonis2(
+  dist ~ Collection_medium,
+  data = meta2,
+  permutations = 9999,
+  strata = meta2$subject_id
+)
+
+
+# swab material만
+df1 <-adonis2(
+  dist ~ subject_id,
+  data = meta2,
+  permutations = 9999)
+
+
+# site만
+df2 <-adonis2(
+  dist ~ site_group,
+  data = meta2,
+  permutations = 9999,
+  strata = meta2$subject_id
+)
+# swab type만
+df3 <- adonis2(
+  dist ~ swab_type2,
+  data = meta2,
+  permutations = 9999,
+  strata = meta2$subject_id
+)
+# swab material만
+df4 <-adonis2(
+  dist ~ Swab_material,
+  data = meta2,
+  permutations = 9999,
+  strata = meta2$subject_id
+)
+
+univar_per <- data.frame(
+  variable = c("Participant identity", "Anatomical site", "Sampling system", "Swab-tip material", "Collection medium"),
+  df = c(df1$Df[1], df2$Df[1],  df3$Df[1], df4$Df[1], df5$Df[1]),
+  `F` = c(df1$`F`[1], df2$`F`[1],  df3$`F`[1], df4$`F`[1], df5$`F`[1]),
+  R2 = c(df1$R2[1], df2$R2[1], df3$R2[1], df4$R2[1], df5$R2[1]),
+  `p-value` = c(df1$`Pr(>F)`[1], df2$`Pr(>F)`[1], df3$`Pr(>F)`[1], df4$`Pr(>F)`[1], df5$`Pr(>F)`[1])
+)
+
+
+univar_per$q.value <- p.adjust(univar_per$p.value, "fdr")
+
+write.csv(
+    univar_per,
+    file.path(table_dir, "Table3_permanova_BH.csv"),
+    row.names = FALSE
+  )
+```
+# Depth 
+```{r}
+
+sum(sample_sums(phy)) # 847074
+
+summary(sample_sums(phy))
+
+sd(sample_sums(phy)) 
+  # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  #  5876   12330   17413   16941   21164   31707 
+# Table S3: sequencing depth and observed taxonomic richness
+# Species-level output is intentionally excluded from the revised manuscript.
+
+# 1. Overall summary
+ps_sub <- prune_taxa(taxa_sums(phy) > 0, phy)
+reads <- sample_sums(ps_sub)
+tax_df <- as.data.frame(tax_table(ps_sub), stringsAsFactors = FALSE)
+
+depth_rows <- list(
+  data.frame(
+    Scope = "Overall",
+    Site = "All",
+    Sampling_system = "All",
+    N_samples = nsamples(ps_sub),
+    Total_reads = sum(reads),
+    Mean_Reads = round(mean(reads), 1),
+    SD_Reads = round(sd(reads), 1),
+    ASV_Count = ntaxa(ps_sub),
+    Phylum_Count = n_distinct(na.omit(tax_df$Phylum)),
+    Genus_Count = n_distinct(na.omit(tax_df$Genus))
+  )
+)
+
+# 2. Anatomical-site summaries
+row_index <- 2
+for (site_value in c("Ac", "Fh")) {
+  keep <- sample_names(phy)[
+    as.character(sample_data(phy)$site_id) == site_value
+  ]
+  ps_sub <- prune_samples(keep, phy)
+  ps_sub <- prune_taxa(taxa_sums(ps_sub) > 0, ps_sub)
+  reads <- sample_sums(ps_sub)
+  tax_df <- as.data.frame(tax_table(ps_sub), stringsAsFactors = FALSE)
+
+  depth_rows[[row_index]] <- data.frame(
+    Scope = "Anatomical site",
+    Site = site_value,
+    Sampling_system = "All",
+    N_samples = nsamples(ps_sub),
+    Total_reads = sum(reads),
+    Mean_Reads = round(mean(reads), 1),
+    SD_Reads = round(sd(reads), 1),
+    ASV_Count = ntaxa(ps_sub),
+    Phylum_Count = n_distinct(na.omit(tax_df$Phylum)),
+    Genus_Count = n_distinct(na.omit(tax_df$Genus))
+  )
+  row_index <- row_index + 1
+}
+
+# 3. Site-by-sampling-system summaries
+for (site_value in c("Ac", "Fh")) {
+  for (i in seq_len(nrow(swab_key))) {
+    swab_value <- swab_key$swab_type2[i]
+    type_value <- as.character(swab_key$Type[i])
+    keep <- sample_names(phy)[
+      as.character(sample_data(phy)$site_id) == site_value &
+        as.character(sample_data(phy)$swab_type2) == swab_value
+    ]
+    ps_sub <- prune_samples(keep, phy)
+    ps_sub <- prune_taxa(taxa_sums(ps_sub) > 0, ps_sub)
+    reads <- sample_sums(ps_sub)
+    tax_df <- as.data.frame(tax_table(ps_sub), stringsAsFactors = FALSE)
+
+    depth_rows[[row_index]] <- data.frame(
+      Scope = "Anatomical site x sampling system",
+      Site = site_value,
+      Sampling_system = type_value,
+      N_samples = nsamples(ps_sub),
+      Total_reads = sum(reads),
+      Mean_Reads = round(mean(reads), 1),
+      SD_Reads = round(sd(reads), 1),
+      ASV_Count = ntaxa(ps_sub),
+      Phylum_Count = n_distinct(na.omit(tax_df$Phylum)),
+      Genus_Count = n_distinct(na.omit(tax_df$Genus))
+    )
+    row_index <- row_index + 1
+  }
+}
+
+table_s3_depth <- bind_rows(depth_rows) %>%
+  mutate(
+    Site = factor(Site, levels = c("All", "Ac", "Fh")),
+    Sampling_system = factor(
+      Sampling_system,
+      levels = c("All", paste0("Type ", 1:5))
+    )
+  ) %>%
+  arrange(Site, Sampling_system) %>%
+  mutate(
+    Site = as.character(Site),
+    Sampling_system = as.character(Sampling_system)
+  )
+
+# 4. Inspect
+print(table_s3_depth)
+
+# 5. Save the inspected table
+write.csv(
+  table_s3_depth,
+  file.path(table_dir, "TableS3_sequencing_depth_by_site_and_sampling_system.csv"),
+  row.names = FALSE
+)
+
+```
+
