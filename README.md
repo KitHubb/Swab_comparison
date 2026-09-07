@@ -65,32 +65,28 @@ Read retention, DADA2 denoising performance, and species-level resolution obtain
 ```bash
 conda activate nextflow_nf
 
-cd /data/home2/ksy/260811_DT_swab
+cd <ANALYSIS_PROJECT_DIRECTORY>
 
 nextflow run \
-  /data/software/nextflow/amplicon_16S_v1v3_qiime_nf/main.nf \
+  <PATH_TO_PIPELINE>/main.nf \
   -profile singularity \
-  -params-file /data/software/nextflow/amplicon_16S_v1v3_qiime_nf/params/v1v3_q20.yml \
-  --reads '/data/FASTQ/HN00182797/DT/*_{1,2}.fastq.gz' \
-  --run_label HN00182797 \
-  --outdir /data/home2/ksy/260811_DT_swab/Output/HN00182797 \
-  --classifier /data/Reference/QIIME2-2025.7/Bacteria/SILVA/silva-138-99-nb-classifier.qza \
+  -params-file <PATH_TO_Q20_PARAMETER_FILE> \
+  --reads '<PATH_TO_READS>/*_{1,2}.fastq.gz' \
+  --run_label <RUN_LABEL> \
+  --outdir <PATH_TO_OUTPUT_DIRECTORY> \
+  --classifier <PATH_TO_SILVA_CLASSIFIER> \
   --taxonomy_label SILVA \
-  --metadata /data/home2/ksy/260811_DT_swab/Input/DT_metadata_qiime.tsv \
+  --metadata <PATH_TO_QIIME2_METADATA> \
   --trimm_optimal true \
-  --trimm_combinations /data/software/nextflow/amplicon_16S_v1v3_qiime_nf/params/trimm_combinations_10bp.tsv \
+  --trimm_combinations <PATH_TO_TRUNCATION_PARAMETER_FILE> \
   --diversity_enabled false \
-  -work-dir /data/home2/ksy/260811_DT_swab/work/HN00182797 \
+  -work-dir <PATH_TO_WORK_DIRECTORY> \
   -resume
 ```
 
 ### Decontamination
 
 Prevalence-based contaminant identification was evaluated across decontam thresholds by comparing the numbers and proportions of ASVs and reads retained or removed from biological samples and negative controls. The supporting sensitivity workflow is distributed as the R package [decontamSensitivity](https://github.com/KitHubb/decontamSensitivity).
-
-## Integrated sensitivity analysis
-
-The sensitivity analysis evaluates whether the estimated effect of the sampling system remains consistent across contaminant-removal thresholds and feature-filtering rules. It supports the primary sampling-system comparison by quantifying data retention and the stability of alpha- and beta-diversity results in low-biomass skin samples.
 
 ## Downstream analysis
 
