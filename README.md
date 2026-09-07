@@ -30,6 +30,25 @@ nextflow run \
   -resume
 ```
 
+### Blast modification 
+Putative species-level supplementation using blast (using the "species_missing_rescue option"") [qiime2_blast_nf](https://github.com/KitHubb/qiime2_blast_nf).
+
+```
+nextflow run /data/software/nextflow/QIIME_blast/main.nf \
+  --backend native \
+  --repseq_qza <PATH_TO_INPUT_DIRECTORY>/05_dada2/rep-seqs.qza \
+  --taxonomy_qza  <PATH_TO_INPUT_DIRECTORY>/06_taxonomy/taxonomy_SILVA.qza \
+  --outdir  <PATH_TO_INPUT_DIRECTORY>/09_BLAST/taxonomy_SILVA_blast.qza \
+  --blast_db /data/Reference/BLAST/16S/20241203/16S_ribosomal_RNA \
+  --taxdump_dir /data/Reference/BLAST/taxdump \
+  --taxonomy_profile generic \
+  --blast_taxonomy_sif <BLAST_sif> \
+  -work-dir <PATH_TO_WORK_DIRECTORY> \
+  -resume
+
+```
+
+
 ### Decontamination
 
 Prevalence-based contaminant identification was evaluated across decontam thresholds by comparing the numbers and proportions of ASVs and reads retained or removed from biological samples and negative controls. The supporting sensitivity workflow is distributed as the R package [decontamSensitivity](https://github.com/KitHubb/decontamSensitivity).
