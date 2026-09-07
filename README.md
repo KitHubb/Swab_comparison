@@ -8,60 +8,6 @@ This repository contains the R project, analysis code, processed data objects, t
 
 Raw paired-end reads were processed with the Nextflow workflow [amplicon_16S_v1v3_qiime_nf](https://github.com/KitHubb/amplicon_16S_v1v3_qiime_nf).
 
-### V1–V3 truncation-length selection
-
-DADA2 truncation settings were benchmarked using the following parameter sets:
-
-```yaml
-dada2_parameter_sets:
-  - name: F0_R0
-    trunc_len_f: 0
-    trunc_len_r: 0
-
-  - name: F280_R280
-    trunc_len_f: 280
-    trunc_len_r: 280
-
-  - name: F280_R275
-    trunc_len_f: 280
-    trunc_len_r: 275
-
-  - name: F275_R280
-    trunc_len_f: 275
-    trunc_len_r: 280
-
-  - name: F280_R270
-    trunc_len_f: 280
-    trunc_len_r: 270
-
-  - name: F275_R275
-    trunc_len_f: 275
-    trunc_len_r: 275
-
-  - name: F280_R265
-    trunc_len_f: 280
-    trunc_len_r: 265
-
-  - name: F275_R270
-    trunc_len_f: 275
-    trunc_len_r: 270
-
-  - name: F280_R260
-    trunc_len_f: 280
-    trunc_len_r: 260
-
-  - name: F270_R270
-    trunc_len_f: 270
-    trunc_len_r: 270
-
-final_dada2_setting:
-  name: F270_R240
-  trunc_len_f: 270
-  trunc_len_r: 240
-```
-
-Read retention, DADA2 denoising performance, and species-level resolution obtained with Greengenes2 were compared across candidate settings. Forward and reverse truncation lengths of 270 and 240 bp, respectively, were selected for the final analysis. Taxonomic classification for the manuscript was then performed using SILVA.
-
 ```bash
 conda activate nextflow_nf
 
