@@ -1,0 +1,221 @@
+---
+title: "Supplementary Figure S3: BLAST-rescued species composition"
+output: html_document
+---
+
+This document preserves the existing ASV table, sample metadata, and phylogenetic tree while replacing only the taxonomy table with `taxonomy_blast.qza`. It then generates species-level community-composition plots for the two anatomical sites.
+
+```{r setup, message=FALSE, warning=FALSE}
+library(phyloseq)
+library(qiime2R)
+library(tidyverse)
+library(RColorBrewer)
+library(patchwork)
+library(grid)
+
+theme_manuscript <- function(base_size = 8) {
+  theme_classic(base_size = base_size) +
+    theme(
+      text = element_text(colour = "black"),
+      axis.title = element_text(size = 9, face = "bold"),
+      axis.text = element_text(size = 8, colour = "black"),
+      plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+      legend.title = element_text(size = 8, face = "bold"),
+      legend.text = element_text(size = 6),
+      plot.tag = element_text(size = 14, face = "bold")
+    )
+}
+```
+
+## Replace the taxonomy table
+
+```{r taxonomy-replacement, message=FALSE, warning=FALSE}
+# The saved object already contains the final ASV table, metadata, and tree.
+phy_original <- readRDS("./Phyloseq/phy_F270R240_260812_v4.rds")
+
+# Keep biological samples and apply the canonical singleton rule used by the
+# manuscript analysis. No count, metadata, or tree component is reconstructed.
+phy_true <- subset_samples(phy_original, control_status == "sample") %>%
+  prune_taxa(taxa_sums(.) > 0, .)
+phy <- prune_taxa(taxa_sums(phy_true) > 1, phy_true)
+
+blast_qza <- qiime2R::read_qza(
+  "../260811_DT_swab/Output/HN00182797/09_BLAST/taxonomy_blast.qza"
+)
+blast_taxonomy <- blast_qza$data %>%
+  transmute(ASV = Feature.ID, Taxon, Confidence)
+
+missing_asvs <- setdiff(taxa_names(phy), blast_taxonomy$ASV)
+if (length(missing_asvs) > 0) {
+  stop(length(missing_asvs), " ASVs in the phyloseq object are absent from taxonomy_blast.qza")
+}
+
+# Parse rank-prefixed taxonomy tokens without assuming that every string begins
+# at the kingdom rank.
+blast_taxonomy_long <- blast_taxonomy %>%
+  separate_rows(Taxon, sep = ";\\s*") %>%
+  mutate(
+    prefix = str_extract(Taxon, "^[dkpcofgs]__"),
+    Rank = case_when(
+      prefix %in% c("d__", "k__") ~ "Kingdom",
+      prefix == "p__" ~ "Phylum",
+      prefix == "c__" ~ "Class",
+      prefix == "o__" ~ "Order",
+      prefix == "f__" ~ "Family",
+      prefix == "g__" ~ "Genus",
+      prefix == "s__" ~ "Species",
+      TRUE ~ NA_character_
+    ),
+    Value = str_remove(Taxon, "^[dkpcofgs]__") %>% na_if("")
+  ) %>%
+  filter(!is.na(Rank)) %>%
+  group_by(ASV, Rank) %>%
+  summarise(Value = first(Value), .groups = "drop") %>%
+  pivot_wider(names_from = Rank, values_from = Value)
+
+# Retain ASVs whose taxonomy string contains no parseable rank token. Their
+# taxonomy fields remain NA instead of dropping the ASV from the replacement table.
+blast_taxonomy_long <- blast_taxonomy %>%
+  select(ASV) %>%
+  distinct() %>%
+  left_join(blast_taxonomy_long, by = "ASV")
+
+taxonomy_ranks <- c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+for (rank in taxonomy_ranks) {
+  if (!rank %in% colnames(blast_taxonomy_long)) blast_taxonomy_long[[rank]] <- NA_character_
+}
+
+blast_taxonomy_matrix <- blast_taxonomy_long %>%
+  select(ASV, all_of(taxonomy_ranks)) %>%
+  column_to_rownames("ASV") %>%
+  as.matrix()
+
+blast_taxonomy_matrix <- blast_taxonomy_matrix[taxa_names(phy), , drop = FALSE]
+tax_table(phy) <- tax_table(blast_taxonomy_matrix)
+
+taxonomy_check <- data.frame(
+  phyloseq_asvs = ntaxa(phy),
+  matched_blast_taxonomy_asvs = sum(taxa_names(phy) %in% blast_taxonomy$ASV),
+  species_resolved_asvs = sum(
+    !is.na(tax_table(phy)[, "Species"]) &
+      !tax_table(phy)[, "Species"] %in% c("", "uncultured", "unclassified")
+  )
+)
+
+print(taxonomy_check)
+```
+
+## Species-level composition
+
+```{r species-composition, message=FALSE, warning=FALSE}
+swab_key <- data.frame(
+  swab_type2 = c("Copan", "Puritan_gel", "Puritan_buffer", "Omni", "Eswab"),
+  Type = factor(paste0("Type ", 1:5), levels = paste0("Type ", 1:5))
+)
+
+# Aggregate ASVs at species rank and retain species with global mean relative
+# abundance greater than 1%, matching the Figure 2 composition rule.
+phy_species <- tax_glom(phy, taxrank = "Species", NArm = FALSE)
+phy_species_relative <- transform_sample_counts(phy_species, function(x) x / sum(x))
+mean_species_abundance <- taxa_sums(phy_species_relative) / nsamples(phy_species_relative)
+major_species_ids <- names(mean_species_abundance)[mean_species_abundance > 0.01]
+
+species_data <- psmelt(phy_species) %>%
+  mutate(
+    Species = as.character(Species),
+    Species = if_else(
+      OTU %in% major_species_ids &
+        !is.na(Species) &
+        !Species %in% c("", "uncultured", "unclassified"),
+      Species,
+      "Other"
+    )
+  ) %>%
+  left_join(swab_key, by = "swab_type2") %>%
+  group_by(site_group, Type, Species) %>%
+  summarise(Abundance = sum(Abundance), .groups = "drop")
+
+species_order <- species_data %>%
+  filter(Species != "Other") %>%
+  group_by(Species) %>%
+  summarise(total_abundance = sum(Abundance), .groups = "drop") %>%
+  arrange(desc(total_abundance)) %>%
+  pull(Species)
+
+species_data$Species <- factor(species_data$Species, levels = c(species_order, "Other"))
+
+n_species <- length(species_order)
+species_colours <- if (n_species <= 8) {
+  brewer.pal(max(3, n_species), "Set2")[seq_len(n_species)]
+} else {
+  colorRampPalette(c(
+    brewer.pal(8, "Set2"),
+    brewer.pal(8, "Set3")
+  ))(n_species)
+}
+species_colours <- c(setNames(species_colours, species_order), Other = "#D3D3D3")
+
+figureS3_A <- ggplot(
+  filter(species_data, site_group == "Antecubital"),
+  aes(Type, Abundance, fill = Species)
+) +
+  geom_col(position = "fill", width = 0.88) +
+  scale_fill_manual(values = species_colours, drop = FALSE) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) +
+  labs(x = NULL, y = "Antecubital relative abundance (%)", fill = "Species", tag = "A") +
+  guides(fill = guide_legend(keyheight = unit(4.8, "mm"), keywidth = unit(7, "mm"))) +
+  theme_manuscript() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+figureS3_B <- ggplot(
+  filter(species_data, site_group == "Forehead"),
+  aes(Type, Abundance, fill = Species)
+) +
+  geom_col(position = "fill", width = 0.88) +
+  scale_fill_manual(values = species_colours, drop = FALSE) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) +
+  labs(x = NULL, y = "Forehead relative abundance (%)", fill = "Species", tag = "B") +
+  guides(fill = guide_legend(keyheight = unit(4.8, "mm"), keywidth = unit(7, "mm"))) +
+  theme_manuscript() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+FigureS3_species <- (figureS3_A | figureS3_B) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "right")
+
+print(FigureS3_species)
+print(species_data)
+```
+
+## Save inspected outputs
+
+```{r save-outputs, message=FALSE, warning=FALSE}
+dir.create("./Figures", recursive = TRUE, showWarnings = FALSE)
+dir.create("./Tables", recursive = TRUE, showWarnings = FALSE)
+
+ggsave(
+  "./Figures/FigureS3_species_composition.png",
+  plot = FigureS3_species,
+  width = 8, height = 4.8, dpi = 600,
+  bg = "white", limitsize = FALSE
+)
+
+ggsave(
+  "./Figures/FigureS3_species_composition.tiff",
+  plot = FigureS3_species,
+  width = 8, height = 4.8, dpi = 600,
+  compression = "lzw", bg = "white", limitsize = FALSE
+)
+
+write.csv(
+  species_data,
+  "./Tables/FigureS3_species_composition_data.csv",
+  row.names = FALSE
+)
+
+write.csv(
+  taxonomy_check,
+  "./Tables/FigureS3_BLAST_taxonomy_replacement_check.csv",
+  row.names = FALSE
+)
+```
