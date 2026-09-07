@@ -44,6 +44,7 @@ QIIME 2 outputs were converted into `phyloseq` objects and analysed in R. The wo
 |---|---|
 | `01_Preprocessing.Rmd` | Metadata integration, decontamination, quality checks, and construction of analysis-ready `phyloseq` objects |
 | `02_Main_Supplement_Figure_Tables_script.Rmd` | Statistical analyses and generation of the manuscript's main and supplementary figures and tables |
+| `03_supple_figuresS3.rmd` | Species level results |
 | `Figures/` | Final main and supplementary figures |
 | `Tables/` | Final tables and numerical results |
 | `Phyloseq/` | Processed `phyloseq` objects used by the R workflow |
