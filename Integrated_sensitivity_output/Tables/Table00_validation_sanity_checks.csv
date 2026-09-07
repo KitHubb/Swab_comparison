@@ -1,7 +1,0 @@
-"check","passed","observed"
-"50 true and five control samples restored",TRUE,"50 / 5"
-"threshold 0.5 ASV count matches saved v4",TRUE,"1855 vs 1855"
-"threshold 0.5 true-sample reads match saved v4",TRUE,"847149 vs 847149"
-"threshold 0.5 ASV identities match saved v4",TRUE,"TRUE"
-"preprocessing tree object was not modified",TRUE,"TRUE"
-"prevalence >=10% equals prevalence >=5 at n=50",TRUE,"TRUE"

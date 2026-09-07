@@ -21,3 +21,4 @@ renv/cache/
 # Local working documents and extended sensitivity analysis
 /Documents/
 /06_Integrated_decontam_filter_sampling_system_analysis.Rmd
+/Integrated_sensitivity_output/
