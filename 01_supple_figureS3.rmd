@@ -113,6 +113,11 @@ swab_key <- data.frame(
   Type = factor(paste0("Type ", 1:5), levels = paste0("Type ", 1:5))
 )
 
+# Reuse the same taxa_plot() function as Main Figure 2. This keeps the
+# dominant-taxon rule, ordering, phylum-based palette, and grey "Other" group
+# consistent between the genus-level main figure and this putative species plot.
+source("./Script/functions.R")
+
 # Aggregate ASVs at species rank and retain species with global mean relative
 # abundance greater than 1%, matching the Figure 2 composition rule.
 phy_species <- tax_glom(phy, taxrank = "Species", NArm = FALSE)
@@ -120,40 +125,64 @@ phy_species_relative <- transform_sample_counts(phy_species, function(x) x / sum
 mean_species_abundance <- taxa_sums(phy_species_relative) / nsamples(phy_species_relative)
 major_species_ids <- names(mean_species_abundance)[mean_species_abundance > 0.01]
 
-species_data <- psmelt(phy_species) %>%
-  mutate(
-    Species = as.character(Species),
-    Species = if_else(
-      OTU %in% major_species_ids &
-        !is.na(Species) &
-        !Species %in% c("", "uncultured", "unclassified"),
-      Species,
-      "Other"
-    )
-  ) %>%
+species_tax_plot <- taxa_plot(
+  melt = psmelt(phy_species),
+  taxa = "Species",
+  tax_otu = major_species_ids,
+  x_axis = "swab_type2",
+  phylum_or = c("Actinomycetota", "Actinobacteriota")
+)
+
+# Summarise the displayed species before splitting by site. The same factor
+# order is then used in panels A and B.
+species_data <- species_tax_plot$data$df %>%
   left_join(swab_key, by = "swab_type2") %>%
+  mutate(Species = if_else(is.na(Species), "Other", as.character(Species))) %>%
   group_by(site_group, Type, Species) %>%
   summarise(Abundance = sum(Abundance), .groups = "drop")
 
-species_order <- species_data %>%
+# Follow the Figure 2 convention: taxa are grouped first by phylum palette,
+# then ordered by global abundance within that phylum. The BLAST taxonomy is
+# used only for labels, so the parent genus defines this display grouping.
+species_summary <- species_data %>%
   filter(Species != "Other") %>%
-  group_by(Species) %>%
+  mutate(
+    Parent_genus = str_remove(Species, "_.*"),
+    Display_phylum = case_when(
+      Parent_genus %in% c("Cutibacterium", "Corynebacterium", "Williamsia", "Gordonia", "Rothia") ~ "Actinomycetota",
+      Parent_genus %in% c("Staphylococcus", "Streptococcus") ~ "Firmicutes",
+      TRUE ~ "Other"
+    )
+  ) %>%
+  group_by(Species, Display_phylum) %>%
   summarise(total_abundance = sum(Abundance), .groups = "drop") %>%
-  arrange(desc(total_abundance)) %>%
+  mutate(Display_phylum = factor(Display_phylum, levels = c("Actinomycetota", "Firmicutes", "Other"))) %>%
+  arrange(Display_phylum, desc(total_abundance))
+
+species_order <- c(species_summary$Species, "Other")
+species_data <- species_data %>%
+  mutate(Species = factor(Species, levels = species_order))
+
+# Wider-spaced Brewer shades make species visible while preserving the Figure 2
+# red (Actinomycetota) and blue (Firmicutes) palette logic. The darkest ninth
+# shade is deliberately excluded; for three taxa, shades 1, 3, and 5 are used.
+actino_species <- species_summary %>%
+  filter(Display_phylum == "Actinomycetota") %>%
+  pull(Species)
+firmicutes_species <- species_summary %>%
+  filter(Display_phylum == "Firmicutes") %>%
   pull(Species)
 
-species_data$Species <- factor(species_data$Species, levels = c(species_order, "Other"))
+red_shades <- rev(brewer.pal(9, "Reds")[1:8])
+blue_shades <- rev(brewer.pal(9, "Blues")[1:8])
+actino_shade_index <- if (length(actino_species) == 3) c(1, 3, 5) else round(seq(1, 8, length.out = length(actino_species)))
+firmicutes_shade_index <- if (length(firmicutes_species) == 3) c(1, 3, 5) else round(seq(1, 8, length.out = length(firmicutes_species)))
 
-n_species <- length(species_order)
-species_colours <- if (n_species <= 8) {
-  brewer.pal(max(3, n_species), "Set2")[seq_len(n_species)]
-} else {
-  colorRampPalette(c(
-    brewer.pal(8, "Set2"),
-    brewer.pal(8, "Set3")
-  ))(n_species)
-}
-species_colours <- c(setNames(species_colours, species_order), Other = "#D3D3D3")
+species_colours <- c(
+  setNames(red_shades[actino_shade_index], actino_species),
+  setNames(blue_shades[firmicutes_shade_index], firmicutes_species),
+  Other = "#D3D3D3"
+)
 
 figureS3_A <- ggplot(
   filter(species_data, site_group == "Antecubital"),
@@ -162,8 +191,8 @@ figureS3_A <- ggplot(
   geom_col(position = "fill", width = 0.88) +
   scale_fill_manual(values = species_colours, drop = FALSE) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) +
-  labs(x = NULL, y = "Antecubital relative abundance (%)", fill = "Species", tag = "A") +
-  guides(fill = guide_legend(keyheight = unit(4.8, "mm"), keywidth = unit(7, "mm"))) +
+  labs(x = NULL, y = "Antecubital relative abundance (%)", fill = "Putative species-level", tag = "A") +
+  guides(fill = guide_legend(keyheight = unit(5.2, "mm"), keywidth = unit(7.5, "mm"))) +
   theme_manuscript() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
 
@@ -174,14 +203,18 @@ figureS3_B <- ggplot(
   geom_col(position = "fill", width = 0.88) +
   scale_fill_manual(values = species_colours, drop = FALSE) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) +
-  labs(x = NULL, y = "Forehead relative abundance (%)", fill = "Species", tag = "B") +
-  guides(fill = guide_legend(keyheight = unit(4.8, "mm"), keywidth = unit(7, "mm"))) +
+  labs(x = NULL, y = "Forehead relative abundance (%)", fill = "Putative species-level", tag = "B") +
+  guides(fill = guide_legend(keyheight = unit(5.2, "mm"), keywidth = unit(7.5, "mm"))) +
   theme_manuscript() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
 
 FigureS3_species <- (figureS3_A | figureS3_B) +
   plot_layout(guides = "collect") &
-  theme(legend.position = "right")
+  theme(
+    legend.position = "right",
+    legend.title = element_text(size = 9, face = "bold"),
+    legend.text = element_text(size = 7)
+  )
 
 print(FigureS3_species)
 print(species_data)
@@ -196,14 +229,14 @@ dir.create("./Tables", recursive = TRUE, showWarnings = FALSE)
 ggsave(
   "./Figures/FigureS3_species_composition.png",
   plot = FigureS3_species,
-  width = 8, height = 4.8, dpi = 600,
+  width = 7, height = 4.2, dpi = 600,
   bg = "white", limitsize = FALSE
 )
 
 ggsave(
   "./Figures/FigureS3_species_composition.tiff",
   plot = FigureS3_species,
-  width = 8, height = 4.8, dpi = 600,
+  width = 7, height = 4.2, dpi = 600,
   compression = "lzw", bg = "white", limitsize = FALSE
 )
 

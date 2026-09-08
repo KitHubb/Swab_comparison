@@ -1482,16 +1482,16 @@ write.csv(
     row.names = FALSE
   )
 ```
-# Depth 
+## Depth 
 ```{r}
 
 sum(sample_sums(phy)) # 847074
 
 summary(sample_sums(phy))
-
-sd(sample_sums(phy)) 
   # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
   #  5876   12330   17413   16941   21164   31707 
+
+sd(sample_sums(phy))  #  6055.549
 # Table S3: sequencing depth and observed taxonomic richness
 # Species-level output is intentionally excluded from the revised manuscript.
 
@@ -1514,6 +1514,9 @@ depth_rows <- list(
     Genus_Count = n_distinct(na.omit(tax_df$Genus))
   )
 )
+#     Scope Site Sampling_system N_samples Total_reads Mean_Reads SD_Reads ASV_Count Phylum_Count Genus_Count
+# 1 Overall  All             All        50      847074    16941.5   6055.5      1780           21         344
+
 
 # 2. Anatomical-site summaries
 row_index <- 2
@@ -1587,6 +1590,20 @@ table_s3_depth <- bind_rows(depth_rows) %>%
 
 # 4. Inspect
 print(table_s3_depth)
+#                                Scope Site Sampling_system N_samples Total_reads Mean_Reads SD_Reads ASV_Count Phylum_Count Genus_Count
+# 1                            Overall  All             All        50      847074    16941.5   6055.5      1780           21         344
+# 2                    Anatomical site   Ac             All        25      404034    16161.4   5090.2      1348           15         278
+# 3  Anatomical site x sampling system   Ac          Type 1         5       96624    19324.8   3407.0       495           12         140
+# 4  Anatomical site x sampling system   Ac          Type 2         5       79099    15819.8   4818.9       405           11         134
+# 5  Anatomical site x sampling system   Ac          Type 3         5       81060    16212.0   7125.4       503           10         133
+# 6  Anatomical site x sampling system   Ac          Type 4         5       76555    15311.0   5906.8       572           12         162
+# 7  Anatomical site x sampling system   Ac          Type 5         5       70696    14139.2   4036.9       374            9         105
+# 8                    Anatomical site   Fh             All        25      443040    17721.6   6905.7       788           17         211
+# 9  Anatomical site x sampling system   Fh          Type 1         5       86214    17242.8   9524.0       270           14          98
+# 10 Anatomical site x sampling system   Fh          Type 2         5       91864    18372.8   7761.3       276           11         105
+# 11 Anatomical site x sampling system   Fh          Type 3         5       93332    18666.4   7057.5       266           10          98
+# 12 Anatomical site x sampling system   Fh          Type 4         5       83230    16646.0   6286.5       203            7          77
+# 13 Anatomical site x sampling system   Fh          Type 5         5       88400    17680.0   6517.8       213            8          80
 
 # 5. Save the inspected table
 write.csv(
@@ -1594,6 +1611,114 @@ write.csv(
   file.path(table_dir, "TableS3_sequencing_depth_by_site_and_sampling_system.csv"),
   row.names = FALSE
 )
+
+```
+
+
+## DNA Conc
+```{r}
+
+meta <- readxl::read_xlsx("D:/KSY/Project/2.DT_Swab[논문작업pf남경화]/Paper/HN00182797_Original_Sample_QC_and_NGS_Library_QC.xlsx")
+
+
+meta
+
+```
+
+
+## Statistic test
+
+```{r}
+
+ps_sub <- prune_taxa(taxa_sums(phy) > 0, phy)
+df <- data.frame(sample_data(ps_sub))
+df$Depth <- sample_sums(ps_sub)
+meta[, c("Sample_Name", "Original_QC_Conc_ng_uL")]
+df2 <- merge(df, meta[, c("Sample_Name", "Original_QC_Conc_ng_uL")], by.x = "sample_id", by.y = "Sample_Name")
+```
+
+Kruskal-Wallis test, Dunn's test
+```{r}
+library(dunn.test)
+
+kruskal.test(Depth ~ swab_type2, data = df2)
+dunn.test(df2$Depth, df2$swab_type2, method = "bh")  # BH = FDR
+# 
+# 	Kruskal-Wallis rank sum test
+# 
+# data:  Depth by swab_type2
+# Kruskal-Wallis chi-squared = 1.0739, df = 4, p-value = 0.8984
+# 
+#   Kruskal-Wallis rank sum test
+# 
+# data: x and group
+# Kruskal-Wallis chi-squared = 1.4974, df = 4, p-value = 0.83
+# 
+# 
+#                     Dunn's Pairwise Comparison of x by group                    
+#                               (Benjamini-Hochberg)                              
+# 
+# Col Mean-│
+# Row Mean │      Copan      Eswab       Omni   Puritan_
+# ─────────┼────────────────────────────────────────────
+#    Eswab │   0.000000
+#          │     0.5000 
+#          │
+#     Omni │   0.843661   0.843661
+#          │     0.6648     0.9971 
+#          │
+# Puritan_ │   0.168732   0.168732  -0.674929
+#          │     0.4811     0.5413     0.6247 
+#          │
+# Puritan_ │  -0.322125  -0.322125  -1.165786  -0.490858
+#          │     0.5338     0.6228     1.0000     0.6235 
+# 
+# FDR = 0.05
+# Reject Ho if adjusted p ≤ FDR/2 with stopping rule, where (unadjusted) p = Pr(Z ≥ |z|)
+kruskal.test(Original_QC_Conc_ng_uL ~ swab_type2, data = df2)
+dunn.test(df2$Original_QC_Conc_ng_uL, df2$swab_type2, method = "bh")
+#   Kruskal-Wallis rank sum test
+# 
+# data: x and group
+# Kruskal-Wallis chi-squared = 6.1919, df = 4, p-value = 0.19
+# 
+# 
+#                     Dunn's Pairwise Comparison of x by group                    
+#                               (Benjamini-Hochberg)                              
+# 
+# Col Mean-│
+# Row Mean │      Copan      Eswab       Omni   Puritan_
+# ─────────┼────────────────────────────────────────────
+#    Eswab │  -2.133941
+#          │     0.1642 
+#          │
+#     Omni │  -0.377484   1.756457
+#          │     0.5042     0.1317 
+#          │
+# Puritan_ │  -0.500744   1.633196  -0.123260
+#          │     0.6166     0.1280     0.5011 
+#          │
+# Puritan_ │  -0.030815   2.103126   0.346669   0.469929
+#          │     0.4877     0.0886     0.4555     0.5320 
+# 
+# FDR = 0.05
+# Reject Ho if adjusted p ≤ FDR/2 with stopping rule, where (unadjusted) p = Pr(Z ≥ |z|)
+
+```
+
+```{r}
+
+# Antecubital fossa만
+df2.ac <-  df2 %>% filter(site_group == "Antecubital")
+kruskal.test(Depth ~ swab_type2, data = df2.ac)
+kruskal.test(Original_QC_Conc_ng_uL ~ swab_type2, data = df2.ac)
+dunn.test(df2.ac$Depth, df2.ac$swab_type2, method = "bh")  # df 사용 (오타로 보임)
+# Forehead만
+df2.fh <-  df2 %>% filter(site_group == "Forehead")
+kruskal.test(Depth ~ swab_type2, data = df2.fh)
+kruskal.test(Original_QC_Conc_ng_uL ~ swab_type2, data = df2.fh)
+dunn.test(df2.fh$Depth, df2.fh$swab_type2, method = "bh")  # df 사용 (오타로 보임)
+
 
 ```
 
