@@ -1,0 +1,37 @@
+During startup - Warning messages:
+1: Setting LC_COLLATE=C.UTF-8 failed 
+2: Setting LC_CTYPE=C.UTF-8 failed 
+3: Setting LC_MONETARY=C.UTF-8 failed 
+4: Setting LC_TIME=C.UTF-8 failed 
+STATUS: PASS
+Input phyloseq: ./../../Phyloseq/phy_F270R240_260812_v3.rds
+Samples: 55
+Features: 2108
+Biological samples: 50
+Negative controls: 5
+Original QC concentration range (ng/uL): 0.4 to 0.56
+Prevalence elapsed seconds: 5.520
+Frequency elapsed seconds: 11.680
+Combined elapsed seconds: 16.720
+decontam version: 1.30.0
+Prevalence p-value coverage: 715/2108
+Frequency p-value coverage: 715/2108
+Combined p-value coverage: 691/2108
+Concentration CV: 8.2%
+
+Threshold 0.1 summary:
+     method threshold contaminant_features retained_features
+ prevalence       0.1                   61              2047
+  frequency       0.1                    1              2107
+   combined       0.1                   34              2074
+ reads_removed_total reads_removed_biological reads_removed_control
+               86310                    30195                 56115
+                  30                       30                     0
+               81456                    28788                 52668
+ reads_removed_total_pct reads_removed_biological_pct reads_removed_control_pct
+             8.500157082                  3.266464300                  61.66551
+             0.002954521                  0.003245369                   0.00000
+             8.022115575                  3.114256475                  57.87756
+
+Frequency-method caution: the original-QC concentration range is narrow (0.40-0.56 ng/uL), so execution success does not establish strong frequency-based discrimination. 
+REPORT: ./output/decontam_threshold_comparison_v3.html

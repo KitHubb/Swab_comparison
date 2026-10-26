@@ -1,0 +1,63 @@
+"site_group","Endpoint","n_complete","excluded_participants","method","statistic","df","p","Kendall_W","Family","q_BH"
+"Antecubital","Alpha: Shannon index",5,"","Friedman chi-squared approximation",5.92,4,0.205202912003994,0.296,"Alpha",0.205202912003994
+"Antecubital","Alpha: Observed ASVs",5,"","Friedman chi-squared approximation",7.02040816326531,4,0.134813669720188,0.351020408163265,"Alpha",0.205202912003994
+"Forehead","Alpha: Shannon index",5,"","Friedman chi-squared approximation",1.12,4,0.891086139604151,0.056,"Alpha",0.891086139604151
+"Forehead","Alpha: Observed ASVs",5,"","Friedman chi-squared approximation",2.56,4,0.633925045033283,0.128,"Alpha",0.891086139604151
+"Antecubital","Selected genus: Cutibacterium",5,"","Friedman chi-squared approximation",0.96,4,0.915799419873088,0.048,"Selected genus",0.915799419873088
+"Antecubital","Selected genus: Staphylococcus",5,"","Friedman chi-squared approximation",4.48,4,0.344925554188779,0.224,"Selected genus",0.517388331283169
+"Antecubital","Selected genus: Streptococcus",5,"","Friedman chi-squared approximation",9.12,4,0.058169047725453,0.456,"Selected genus",0.174507143176359
+"Forehead","Selected genus: Cutibacterium",5,"","Friedman chi-squared approximation",7.2,4,0.125689123257546,0.36,"Selected genus",0.346617356963743
+"Forehead","Selected genus: Staphylococcus",5,"","Friedman chi-squared approximation",5.6,4,0.231078237975828,0.28,"Selected genus",0.346617356963743
+"Forehead","Selected genus: Streptococcus",5,"","Friedman chi-squared approximation",1.95555555555556,4,0.743933300661782,0.0977777777777778,"Selected genus",0.743933300661782
+"Antecubital","Phylum: Actinobacteriota",5,"","Friedman chi-squared approximation",5.76,4,0.217802879796439,0.288,"Phylum",0.326704319694658
+"Antecubital","Phylum: Firmicutes",5,"","Friedman chi-squared approximation",3.2,4,0.524930946786104,0.16,"Phylum",0.524930946786104
+"Antecubital","Phylum: Proteobacteria",5,"","Friedman chi-squared approximation",8,4,0.0915781944436709,0.4,"Phylum",0.274734583331013
+"Antecubital","Genus: Cutibacterium",5,"","Friedman chi-squared approximation",0.96,4,0.915799419873088,0.048,"Genus",0.915799419873088
+"Antecubital","Genus: Streptococcus",5,"","Friedman chi-squared approximation",9.12,4,0.058169047725453,0.456,"Genus",0.290845238627265
+"Antecubital","Genus: Staphylococcus",5,"","Friedman chi-squared approximation",4.48,4,0.344925554188779,0.224,"Genus",0.492750791698256
+"Antecubital","Genus: Neisseriaceae_f",5,"","Friedman chi-squared approximation",6.75862068965517,4,0.149207236801767,0.337931034482759,"Genus",0.318920700913043
+"Antecubital","Genus: Rothia",5,"","Friedman chi-squared approximation",6.58585858585859,4,0.159460350456522,0.329292929292929,"Genus",0.318920700913043
+"Antecubital","Genus: Williamsia",5,"","Friedman chi-squared approximation",1.6,4,0.808792135410999,0.08,"Genus",0.898657928234443
+"Antecubital","Genus: Gordonia",5,"","Friedman chi-squared approximation",10.3050847457627,4,0.0355904839183066,0.515254237288136,"Genus",0.290845238627265
+"Antecubital","Genus: Dietzia",5,"","Friedman chi-squared approximation",2.53061224489796,4,0.639162713536324,0.126530612244898,"Genus",0.798953391920405
+"Antecubital","Genus: Corynebacteriaceae_f",5,"","Friedman chi-squared approximation",7.63636363636364,4,0.105844401103644,0.381818181818182,"Genus",0.318920700913043
+"Antecubital","Genus: Corynebacterium",5,"","Friedman chi-squared approximation",4.96,4,0.291426425060842,0.248,"Genus",0.485710708434737
+"Antecubital","Species: Cutibacterium_g",5,"","Friedman chi-squared approximation",0.96,4,0.915799419873088,0.048,"Species",0.915799419873088
+"Antecubital","Species: Streptococcus_g",5,"","Friedman chi-squared approximation",9.12,4,0.058169047725453,0.456,"Species",0.290845238627265
+"Antecubital","Species: Staphylococcus_g",5,"","Friedman chi-squared approximation",4.48,4,0.344925554188779,0.224,"Species",0.492750791698256
+"Antecubital","Species: Neisseriaceae_f",5,"","Friedman chi-squared approximation",6.75862068965517,4,0.149207236801767,0.337931034482759,"Species",0.318920700913043
+"Antecubital","Species: Rothia_g",5,"","Friedman chi-squared approximation",6.58585858585859,4,0.159460350456522,0.329292929292929,"Species",0.318920700913043
+"Antecubital","Species: Williamsia_g",5,"","Friedman chi-squared approximation",1.6,4,0.808792135410999,0.08,"Species",0.898657928234443
+"Antecubital","Species: Gordonia_g",5,"","Friedman chi-squared approximation",10.3050847457627,4,0.0355904839183066,0.515254237288136,"Species",0.290845238627265
+"Antecubital","Species: Dietzia_g",5,"","Friedman chi-squared approximation",2.53061224489796,4,0.639162713536324,0.126530612244898,"Species",0.798953391920405
+"Antecubital","Species: Corynebacteriaceae_f",5,"","Friedman chi-squared approximation",7.63636363636364,4,0.105844401103644,0.381818181818182,"Species",0.318920700913043
+"Antecubital","Species: Corynebacterium_g",5,"","Friedman chi-squared approximation",4.96,4,0.291426425060842,0.248,"Species",0.485710708434737
+"Forehead","Phylum: Actinobacteriota",5,"","Friedman chi-squared approximation",6.88,4,0.142367202855702,0.344,"Phylum",0.275204875978147
+"Forehead","Phylum: Firmicutes",5,"","Friedman chi-squared approximation",5.12,4,0.275204875978147,0.256,"Phylum",0.275204875978147
+"Forehead","Phylum: Proteobacteria",5,"","Friedman chi-squared approximation",5.12359550561798,4,0.274849295288697,0.256179775280899,"Phylum",0.275204875978147
+"Forehead","Genus: Cutibacterium",5,"","Friedman chi-squared approximation",7.2,4,0.125689123257546,0.36,"Genus",0.628445616287729
+"Forehead","Genus: Streptococcus",5,"","Friedman chi-squared approximation",1.95555555555556,4,0.743933300661782,0.0977777777777778,"Genus",0.826592556290869
+"Forehead","Genus: Staphylococcus",5,"","Friedman chi-squared approximation",5.6,4,0.231078237975828,0.28,"Genus",0.770260793252761
+"Forehead","Genus: Neisseriaceae_f",5,"","Friedman chi-squared approximation",10.4827586206897,4,0.033035315962615,0.524137931034483,"Genus",0.33035315962615
+"Forehead","Genus: Rothia",5,"","Friedman chi-squared approximation",1.97333333333333,4,0.740663795250628,0.0986666666666667,"Genus",0.826592556290869
+"Forehead","Genus: Williamsia",5,"","Friedman chi-squared approximation",3.30434782608696,4,0.508243678260312,0.165217391304348,"Genus",0.826592556290869
+"Forehead","Genus: Gordonia",5,"","Friedman chi-squared approximation",2.22222222222222,4,0.694962974261134,0.111111111111111,"Genus",0.826592556290869
+"Forehead","Genus: Dietzia",5,"","Friedman chi-squared approximation",0.4,4,0.982476903693578,0.02,"Genus",0.982476903693578
+"Forehead","Genus: Corynebacteriaceae_f",5,"","Friedman chi-squared approximation",4.48,4,0.344925554188779,0.224,"Genus",0.826592556290869
+"Forehead","Genus: Corynebacterium",5,"","Friedman chi-squared approximation",2.88,4,0.578103731184377,0.144,"Genus",0.826592556290869
+"Forehead","Species: Cutibacterium_g",5,"","Friedman chi-squared approximation",7.2,4,0.125689123257546,0.36,"Species",0.628445616287729
+"Forehead","Species: Streptococcus_g",5,"","Friedman chi-squared approximation",1.95555555555556,4,0.743933300661782,0.0977777777777778,"Species",0.826592556290869
+"Forehead","Species: Staphylococcus_g",5,"","Friedman chi-squared approximation",5.6,4,0.231078237975828,0.28,"Species",0.770260793252761
+"Forehead","Species: Neisseriaceae_f",5,"","Friedman chi-squared approximation",10.4827586206897,4,0.033035315962615,0.524137931034483,"Species",0.33035315962615
+"Forehead","Species: Rothia_g",5,"","Friedman chi-squared approximation",1.97333333333333,4,0.740663795250628,0.0986666666666667,"Species",0.826592556290869
+"Forehead","Species: Williamsia_g",5,"","Friedman chi-squared approximation",3.30434782608696,4,0.508243678260312,0.165217391304348,"Species",0.826592556290869
+"Forehead","Species: Gordonia_g",5,"","Friedman chi-squared approximation",2.22222222222222,4,0.694962974261134,0.111111111111111,"Species",0.826592556290869
+"Forehead","Species: Dietzia_g",5,"","Friedman chi-squared approximation",0.4,4,0.982476903693578,0.02,"Species",0.982476903693578
+"Forehead","Species: Corynebacteriaceae_f",5,"","Friedman chi-squared approximation",4.48,4,0.344925554188779,0.224,"Species",0.826592556290869
+"Forehead","Species: Corynebacterium_g",5,"","Friedman chi-squared approximation",2.88,4,0.578103731184377,0.144,"Species",0.826592556290869
+"Antecubital","Depth",5,"","Friedman chi-squared approximation",3.68,4,0.451041490143655,0.184,"DNA/read",0.451041490143655
+"Antecubital","Original_QC_Conc_ng_uL",5,"","Friedman chi-squared approximation",6.08510638297872,4,0.192881991316956,0.304255319148936,"DNA/read",0.385763982633913
+"Forehead","Depth",5,"","Friedman chi-squared approximation",1.44,4,0.837213880251151,0.072,"DNA/read",0.837213880251151
+"Forehead","Original_QC_Conc_ng_uL",5,"","Friedman chi-squared approximation",5.31868131868132,4,0.256133195246455,0.265934065934066,"DNA/read",0.512266390492911
+"Two-site mean (secondary)","Depth",5,"","Friedman chi-squared approximation",2.08,4,0.721047551195912,0.104,"DNA/read",0.721047551195912
+"Two-site mean (secondary)","Original_QC_Conc_ng_uL",5,"","Friedman chi-squared approximation",8.70103092783505,4,0.0690225125157222,0.435051546391753,"DNA/read",0.138045025031444

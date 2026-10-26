@@ -1,0 +1,14 @@
+"Scope","Site","Sampling_system","N_samples","Total_reads","Mean_Reads","SD_Reads","ASV_Count","Phylum_Count","Genus_Count"
+"Overall","All","All",50,847074,16941.5,6055.5,1780,21,344
+"Anatomical site","Ac","All",25,404034,16161.4,5090.2,1348,15,278
+"Anatomical site x sampling system","Ac","Type 1",5,96624,19324.8,3407,495,12,140
+"Anatomical site x sampling system","Ac","Type 2",5,79099,15819.8,4818.9,405,11,134
+"Anatomical site x sampling system","Ac","Type 3",5,81060,16212,7125.4,503,10,133
+"Anatomical site x sampling system","Ac","Type 4",5,76555,15311,5906.8,572,12,162
+"Anatomical site x sampling system","Ac","Type 5",5,70696,14139.2,4036.9,374,9,105
+"Anatomical site","Fh","All",25,443040,17721.6,6905.7,788,17,211
+"Anatomical site x sampling system","Fh","Type 1",5,86214,17242.8,9524,270,14,98
+"Anatomical site x sampling system","Fh","Type 2",5,91864,18372.8,7761.3,276,11,105
+"Anatomical site x sampling system","Fh","Type 3",5,93332,18666.4,7057.5,266,10,98
+"Anatomical site x sampling system","Fh","Type 4",5,83230,16646,6286.5,203,7,77
+"Anatomical site x sampling system","Fh","Type 5",5,88400,17680,6517.8,213,8,80

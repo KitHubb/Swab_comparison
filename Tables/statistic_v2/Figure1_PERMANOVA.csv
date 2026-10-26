@@ -1,0 +1,5 @@
+"site","distance","variable","R2","F","p_value"
+"Antecubital fossa","Unweighted UniFrac","swab_type2",0.132311580824672,0.762437171573776,0.4375
+"Antecubital fossa","Weighted UniFrac","swab_type2",0.096705226122174,0.535291628595505,0.166
+"Forehead","Unweighted UniFrac","swab_type2",0.120073701633772,0.682294084497272,0.5132
+"Forehead","Weighted UniFrac","swab_type2",0.0479497750547178,0.251823768317862,0.8691

@@ -1,0 +1,15 @@
+"metric","value"
+"samples_matched",55
+"biological_samples",50
+"negative_controls",5
+"features_total",2108
+"prevalence_p_non_missing",715
+"prevalence_p_missing",1393
+"frequency_p_non_missing",715
+"frequency_p_missing",1393
+"combined_p_non_missing",691
+"combined_p_missing",1417
+"concentration_min_ng_uL",0.4
+"concentration_max_ng_uL",0.56
+"concentration_mean_ng_uL",0.479818181818182
+"concentration_cv",0.0822469350117708

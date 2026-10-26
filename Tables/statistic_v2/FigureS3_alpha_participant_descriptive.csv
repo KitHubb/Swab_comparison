@@ -1,0 +1,21 @@
+"site_group","Index","subject_id","n_swabs","median","IQR"
+"Antecubital","Shannon index","S001",5,2.57722357388718,0.0804883023346483
+"Antecubital","Shannon index","S002",5,2.16331242960821,0.404630043691154
+"Antecubital","Shannon index","S003",5,3.22955724601235,1.38020731022381
+"Antecubital","Shannon index","S004",5,4.20755424423835,0.317890095299834
+"Antecubital","Shannon index","S005",5,2.16812981701834,0.418408625893043
+"Antecubital","Observed ASVs","S001",5,101,21
+"Antecubital","Observed ASVs","S002",5,91,21
+"Antecubital","Observed ASVs","S003",5,117,107
+"Antecubital","Observed ASVs","S004",5,208,35
+"Antecubital","Observed ASVs","S005",5,37,18
+"Forehead","Shannon index","S001",5,0.440272460030164,0.269998666203841
+"Forehead","Shannon index","S002",5,0.114913755818082,0.329161252737932
+"Forehead","Shannon index","S003",5,0.572709107323656,0.802304132981002
+"Forehead","Shannon index","S004",5,3.18117098302216,0.123690992245317
+"Forehead","Shannon index","S005",5,2.32630841583853,0.919115592462097
+"Forehead","Observed ASVs","S001",5,25,4
+"Forehead","Observed ASVs","S002",5,13,15
+"Forehead","Observed ASVs","S003",5,16,18
+"Forehead","Observed ASVs","S004",5,144,16
+"Forehead","Observed ASVs","S005",5,89,17
