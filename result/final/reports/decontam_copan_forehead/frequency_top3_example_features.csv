@@ -1,0 +1,7 @@
+"feature_id","frequency","total_prevalence","p_frequency","contaminant_frequency_default","p_prevalence","contaminant_prevalence_default","total_reads","true_sample_reads","control_reads","Kingdom","Phylum","Class","Order","Family","Genus","Species","taxon_label","short_feature_id","facet_label"
+"aeea6b40db276dd7ca8b48feb8496324",0.000593239954713032,2,0.328748286017316,FALSE,0.166666666666667,FALSE,82,44,38,"Bacteria","Deinococcota","Deinococci","Thermales","Thermaceae","Thermus","Thermus_g","Thermus_g","aeea6b40","Thermus_g
+ASV aeea6b40; p = 0.329"
+"e352ef2edd5a7c02ebf93ed1a2794986",0.000712739904503592,2,0.334721164886436,FALSE,0.666666666666667,FALSE,83,83,0,"Bacteria","Actinobacteriota","Actinobacteria","Corynebacteriales","Corynebacteriaceae","Corynebacterium","Corynebacterium_g","Corynebacterium_g","e352ef2e","Corynebacterium_g
+ASV e352ef2e; p = 0.335"
+"996a85f5800dfb9aaf2dcdf11be163c2",0.000364921262991973,2,0.418954826899029,FALSE,0.666666666666667,FALSE,58,58,0,"Bacteria","Actinobacteriota","Actinobacteria","Corynebacteriales","Corynebacteriaceae","Corynebacterium","Corynebacterium_g","Corynebacterium_g","996a85f5","Corynebacterium_g
+ASV 996a85f5; p = 0.419"

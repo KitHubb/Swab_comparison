@@ -1,0 +1,7 @@
+"phyloseq_sample_id","sample_id","subject_id","sample_code","study_type","swab_type","gender","age","swab_method","site_group","site_id","control_status","is_control","sample_class","read_depth","Original_QC_Conc_ng_uL","Library_QC_Conc_ng_uL"
+"001FhRUSw_1","001FhRUSw_1","S001","AF1","DT","Copan","M","35","Sw","Forehead","Fh","sample",FALSE,"True sample",31711,0.5,13.2
+"001NCXUSw","001NCXUSw","Control","NC1","DT","Copan","Sw","NC","NC","negative-control",NA,NA,TRUE,"Negative control",21949,0.43,4.54
+"002FhRUSw_1","002FhRUSw_1","S002","BF1","DT","Copan","M","27","Sw","Forehead","Fh","sample",FALSE,"True sample",12350,0.5,15.6
+"003FhRUSw_1","003FhRUSw_1","S003","CF1","DT","Copan","M","37","Sw","Forehead","Fh","sample",FALSE,"True sample",11048,0.47,7.62
+"004FhRUSw_1","004FhRUSw_1","S004","DF1","DT","Copan","M","27","Sw","Forehead","Fh","sample",FALSE,"True sample",18119,0.46,7.03
+"005FhRUSw_1","005FhRUSw_1","S005","EF1","DT","Copan","F","26","Sw","Forehead","Fh","sample",FALSE,"True sample",24068,0.42,3.9

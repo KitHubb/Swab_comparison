@@ -3,7 +3,7 @@
 .Ruserdata
 .Rproj.user/
 
-data/
+data/raw/
 results/
 
 *.fastq
@@ -18,8 +18,14 @@ renv/cache/
 # Local reproducibility library; packages are restored separately on each computer.
 /R_library/
 
-# Local working documents and extended sensitivity analysis
+# Local working documents
 /Documents/
-/06_Integrated_decontam_filter_sampling_system_analysis.Rmd
-/Integrated_sensitivity_output/
-/02_Microbiome_analysis.Rmd
+
+# Reproducible reports may create large local caches next to an Rmd.
+**/*_cache/
+/result/final/reports/*.md
+/result/final/reports/*_files/
+
+# Temporary editor and operating-system files
+*.tmp
+~$*

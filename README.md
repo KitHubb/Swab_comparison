@@ -2,7 +2,22 @@
 
 ## Introduction
 
-This repository contains the R project, analysis code, processed data objects, tables, and figures used to reproduce the analyses reported in the manuscript *“Comparative Evaluation of Skin Microbiome Sampling Systems.”* The study compares five integrated swab–collection-medium systems for V1–V3 16S rRNA gene profiling of the antecubital fossa and forehead in a repeated-measures design.
+This repository contains the R project, analysis code, analysis-ready data objects, tables, and figures used to reproduce the manuscript analyses. The study compares five integrated swab–collection-medium systems for V1–V3 16S rRNA gene profiling of the antecubital fossa and forehead in a repeated-measures design.
+
+## Repository structure
+
+| Path | Purpose |
+|---|---|
+| `server/` | Nextflow configuration and server-side execution notes |
+| `data/process/` | Analysis-ready metadata, phyloseq objects, and exported intermediate tables |
+| `data/raw/` | Raw or external pipeline inputs; intentionally excluded from Git |
+| `analysis/final/` | Current reproducible preprocessing and manuscript analysis Rmd files |
+| `analysis/old/` | Earlier and exploratory analyses retained with their original paths |
+| `result/final/` | Current manuscript figures, tables, and rendered reports |
+| `result/old/` | Earlier results retained on GitHub with their original paths documented |
+| `docs/` | Project documentation and manuscript-location notes |
+
+Every `old/` directory contains an `ORIGINAL_PATHS.tsv` and a README so an earlier analysis can be related to the paths used when it was originally run.
 
 ## Preprocessing
 
@@ -53,21 +68,28 @@ nextflow run /data/software/nextflow/QIIME_blast/main.nf \
 
 Prevalence-based contaminant identification was evaluated across decontam thresholds by comparing the numbers and proportions of ASVs and reads retained or removed from biological samples and negative controls. The supporting sensitivity workflow is distributed as the R package [decontamSensitivity](https://github.com/KitHubb/decontamSensitivity).
 
-## Downstream analysis
+## Analysis order
 
-QIIME 2 outputs were converted into `phyloseq` objects and analysed in R. The workflow includes singleton removal, rarefaction, alpha and beta diversity, taxonomic composition, overlap among sampling systems, and PERMANOVA. Detailed analysis and figure-generation code is provided in the files below.
+Run the current analyses from the repository root in this order:
 
-## Core files
+1. `analysis/final/00_Preprocessing.Rmd`
+2. `analysis/final/01_Main_Supplement_Analysis.Rmd`
+3. `analysis/final/02_Species_Composition.Rmd`
+4. `analysis/final/03_Decontam_Sensitivity.Rmd`
+
+The downstream workflow starts from `data/process/phyloseq_analysis.rds`. It includes singleton removal, rarefaction, repeated-measures statistics, alpha and beta diversity, taxonomic composition, overlap among sampling systems, and PERMANOVA.
+
+## Current core files
 
 | File | Purpose |
 |---|---|
-| `01_Preprocessing.Rmd` | Metadata integration, decontamination, quality checks, and construction of analysis-ready `phyloseq` objects |
-| `02_Main_Supplement_Figure_Tables_script.Rmd` | Statistical analyses and generation of the manuscript's main and supplementary figures and tables |
-| `03_supple_figuresS3.rmd` | Species level results |
-| `Figures/` | Final main and supplementary figures |
-| `Tables/` | Final tables and numerical results |
-| `Phyloseq/` | Processed `phyloseq` objects used by the R workflow |
-| `metadata/` | Analysis metadata |
+| `analysis/final/00_Preprocessing.Rmd` | Metadata integration, decontamination, quality checks, and construction of analysis-ready objects |
+| `analysis/final/01_Main_Supplement_Analysis.Rmd` | Repeated-measures analyses and generation of main and supplementary figures and tables |
+| `analysis/final/02_Species_Composition.Rmd` | Putative species-level supplementary composition analysis |
+| `analysis/final/03_Decontam_Sensitivity.Rmd` | Decontam threshold and control-profile sensitivity report |
+| `result/final/figures/` | Current main and supplementary figures |
+| `result/final/tables/` | Current numerical results and audit tables |
+| `data/process/` | Processed inputs used by the R workflow |
 
 ## Data availability
 

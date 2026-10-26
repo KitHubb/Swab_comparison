@@ -1,0 +1,9 @@
+current_path	original_path	status
+result/old/figures/	Figures/	archived figures excluding former statistic_v2 outputs
+result/old/tables/	Tables/	archived tables excluding former statistic_v2 outputs
+result/old/reports/01_supple_figureS3.html	01_supple_figureS3.html	archived rendered report
+result/old/reports/2_Main_Supplement_Figure_Tables_script_v2.html	2_Main_Supplement_Figure_Tables_script_v2.html	archived rendered report
+result/old/reports/2_Main_Supplement_Figure_Tables_script_v2.md	2_Main_Supplement_Figure_Tables_script_v2.md	archived rendered report source
+result/old/reports/2_Main_Supplement_Figure_Tables_script_v2_files/	2_Main_Supplement_Figure_Tables_script_v2_files/	archived report assets
+result/old/reports/decontam_copan_forehead/	results/decontam_copan_forehead/	archived decontam report bundle
+result/old/integrated_sensitivity_output/	Integrated_sensitivity_output/	archived extended sensitivity output
