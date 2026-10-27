@@ -1,0 +1,53 @@
+"Anatomical_site","Rank","Taxa","Type1","Type2","Type3","Type4","Type5","Average","Friedman_chisq","Friedman_df","Friedman_p","Kendall_W","Friedman_q_BH_within_site_and_rank"
+"Antecubital fossa","Phylum","Actinobacteriota",58.13,67.03,59.71,52.09,62.95,59.98,5.76,4,0.217802879796439,0.288,0.326704319694658
+"Antecubital fossa","Phylum","Firmicutes",33.9,26.66,30.7,34.27,27,30.5,3.2,4,0.524930946786104,0.16,0.524930946786104
+"Antecubital fossa","Phylum","Proteobacteria",7.08,5.74,8.51,9.92,9.65,8.18,8,4,0.0915781944436709,0.4,0.274734583331013
+"Antecubital fossa","Phylum","Others",0.89,0.58,1.08,3.72,0.4,1.33,N/A,N/A,N/A,N/A,N/A
+"Antecubital fossa","Genus","Staphylococcus",28.25,21.12,19.54,19.87,23.3,22.41,4.48,4,0.344925554188779,0.224,0.492750791698256
+"Antecubital fossa","Genus","Cutibacterium",31.59,19.23,19.93,17.42,18.98,21.43,0.96,4,0.915799419873088,0.048,0.915799419873088
+"Antecubital fossa","Genus","Others",15.15,16.11,22.95,25.33,17.69,19.45,N/A,N/A,N/A,N/A,N/A
+"Antecubital fossa","Genus","Corynebacterium",7.86,21.49,11.72,11.45,11.75,12.85,4.96,4,0.291426425060842,0.248,0.485710708434737
+"Antecubital fossa","Genus","Corynebacteriaceae_f",7.73,14.59,15.16,7.05,11.24,11.15,7.63636363636364,4,0.105844401103644,0.381818181818182,0.318920700913043
+"Antecubital fossa","Genus","Streptococcus",2.56,4.06,6.99,10.61,2.99,5.44,9.12,4,0.058169047725453,0.456,0.290845238627265
+"Antecubital fossa","Genus","Rothia",0.75,0.37,1.12,1.46,8.78,2.5,6.58585858585859,4,0.159460350456522,0.329292929292929,0.318920700913043
+"Antecubital fossa","Genus","Williamsia",3.26,1.57,1.19,3.71,2.58,2.46,1.6,4,0.808792135410999,0.08,0.898657928234443
+"Antecubital fossa","Genus","Gordonia",1.43,0.58,0.84,1.5,1.69,1.21,10.3050847457627,4,0.0355904839183066,0.515254237288136,0.290845238627265
+"Antecubital fossa","Genus","Dietzia",1.28,0.89,0.56,1.56,0.9,1.04,2.53061224489796,4,0.639162713536324,0.126530612244898,0.798953391920405
+"Antecubital fossa","Genus","Neisseriaceae_f",0.14,0,0,0.04,0.09,0.05,6.75862068965517,4,0.149207236801767,0.337931034482759,0.318920700913043
+"Antecubital fossa","Species","Staphylococcus_g",28.25,21.12,19.54,19.87,23.3,22.41,N/A,N/A,N/A,N/A,N/A
+"Antecubital fossa","Species","Cutibacterium_g",31.59,19.23,19.93,17.42,18.98,21.43,N/A,N/A,N/A,N/A,N/A
+"Antecubital fossa","Species","Others",15.15,16.11,22.95,25.33,17.69,19.45,N/A,N/A,N/A,N/A,N/A
+"Antecubital fossa","Species","Corynebacterium_g",7.86,21.49,11.72,11.45,11.75,12.85,N/A,N/A,N/A,N/A,N/A
+"Antecubital fossa","Species","Corynebacteriaceae_f",7.73,14.59,15.16,7.05,11.24,11.15,N/A,N/A,N/A,N/A,N/A
+"Antecubital fossa","Species","Streptococcus_g",2.56,4.06,6.99,10.61,2.99,5.44,N/A,N/A,N/A,N/A,N/A
+"Antecubital fossa","Species","Rothia_g",0.75,0.37,1.12,1.46,8.78,2.5,N/A,N/A,N/A,N/A,N/A
+"Antecubital fossa","Species","Williamsia_g",3.26,1.57,1.19,3.71,2.58,2.46,N/A,N/A,N/A,N/A,N/A
+"Antecubital fossa","Species","Gordonia_g",1.43,0.58,0.84,1.5,1.69,1.21,N/A,N/A,N/A,N/A,N/A
+"Antecubital fossa","Species","Dietzia_g",1.28,0.89,0.56,1.56,0.9,1.04,N/A,N/A,N/A,N/A,N/A
+"Antecubital fossa","Species","Neisseriaceae_f",0.14,0,0,0.04,0.09,0.05,N/A,N/A,N/A,N/A,N/A
+"Forehead","Phylum","Actinobacteriota",73.78,71.31,68.94,77.59,79.51,74.23,6.88,4,0.142367202855702,0.344,0.275204875978147
+"Forehead","Phylum","Proteobacteria",19.89,21.58,21.53,16.55,15.25,18.96,5.12359550561798,4,0.274849295288697,0.256179775280899,0.275204875978147
+"Forehead","Phylum","Firmicutes",5.2,5.8,8.88,5,4.97,5.97,5.12,4,0.275204875978147,0.256,0.275204875978147
+"Forehead","Phylum","Others",1.14,1.31,0.65,0.86,0.27,0.84,N/A,N/A,N/A,N/A,N/A
+"Forehead","Genus","Cutibacterium",59.08,51.84,49.79,61.06,69.33,58.22,7.2,4,0.125689123257546,0.36,0.628445616287729
+"Forehead","Genus","Neisseriaceae_f",17.68,19.82,19.42,15.76,12.14,16.97,10.4827586206897,4,0.033035315962615,0.524137931034483,0.33035315962615
+"Forehead","Genus","Others",6.1,7.23,5.65,4.72,6.46,6.03,N/A,N/A,N/A,N/A,N/A
+"Forehead","Genus","Staphylococcus",3.35,4.54,8.11,4.52,2.4,4.58,5.6,4,0.231078237975828,0.28,0.770260793252761
+"Forehead","Genus","Gordonia",4.93,3.91,5.08,4.69,0.4,3.8,2.22222222222222,4,0.694962974261134,0.111111111111111,0.826592556290869
+"Forehead","Genus","Corynebacterium",2.95,5.41,3.95,2.04,2.06,3.28,2.88,4,0.578103731184377,0.144,0.826592556290869
+"Forehead","Genus","Williamsia",2.46,3.6,4.3,4.46,0.72,3.1,3.30434782608696,4,0.508243678260312,0.165217391304348,0.826592556290869
+"Forehead","Genus","Corynebacteriaceae_f",1.18,1.95,1.66,1.17,1.72,1.54,4.48,4,0.344925554188779,0.224,0.826592556290869
+"Forehead","Genus","Dietzia",0.84,1.05,1.63,1.27,0.48,1.05,0.4,4,0.982476903693578,0.02,0.982476903693578
+"Forehead","Genus","Streptococcus",1.34,0.56,0.27,0.26,2.24,0.93,1.95555555555556,4,0.743933300661782,0.0977777777777778,0.826592556290869
+"Forehead","Genus","Rothia",0.08,0.1,0.14,0.06,2.04,0.48,1.97333333333333,4,0.740663795250628,0.0986666666666667,0.826592556290869
+"Forehead","Species","Cutibacterium_g",59.08,51.84,49.79,61.06,69.33,58.22,N/A,N/A,N/A,N/A,N/A
+"Forehead","Species","Neisseriaceae_f",17.68,19.82,19.42,15.76,12.14,16.97,N/A,N/A,N/A,N/A,N/A
+"Forehead","Species","Others",6.1,7.23,5.65,4.72,6.46,6.03,N/A,N/A,N/A,N/A,N/A
+"Forehead","Species","Staphylococcus_g",3.35,4.54,8.11,4.52,2.4,4.58,N/A,N/A,N/A,N/A,N/A
+"Forehead","Species","Gordonia_g",4.93,3.91,5.08,4.69,0.4,3.8,N/A,N/A,N/A,N/A,N/A
+"Forehead","Species","Corynebacterium_g",2.95,5.41,3.95,2.04,2.06,3.28,N/A,N/A,N/A,N/A,N/A
+"Forehead","Species","Williamsia_g",2.46,3.6,4.3,4.46,0.72,3.1,N/A,N/A,N/A,N/A,N/A
+"Forehead","Species","Corynebacteriaceae_f",1.18,1.95,1.66,1.17,1.72,1.54,N/A,N/A,N/A,N/A,N/A
+"Forehead","Species","Dietzia_g",0.84,1.05,1.63,1.27,0.48,1.05,N/A,N/A,N/A,N/A,N/A
+"Forehead","Species","Streptococcus_g",1.34,0.56,0.27,0.26,2.24,0.93,N/A,N/A,N/A,N/A,N/A
+"Forehead","Species","Rothia_g",0.08,0.1,0.14,0.06,2.04,0.48,N/A,N/A,N/A,N/A,N/A

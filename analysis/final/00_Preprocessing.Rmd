@@ -1,5 +1,5 @@
 ---
-title: "01_Preprocessing"
+title: "00 Preprocessing and contamination assessment"
 author: "kim soyeon"
 date: "2026-08-12"
 output: html_document
@@ -81,6 +81,14 @@ sample_names(phy)
 rownames(meta)<- meta$sample_id
 head(meta)
 sample_data(phy) <-sample_data(meta) 
+
+# Normalize the metadata labels used by the submitted contamination analysis.
+sample_data(phy)$control_status <- ifelse(
+  sample_data(phy)$control_status %in% c("control", "negative-control") |
+    sample_data(phy)$site_group %in% c("NC", "negative-control"),
+  "control",
+  "sample"
+)
 
 phy
 saveRDS(phy, file.path(project_root, "data", "process", "phyloseq_imported.rds"))
@@ -399,7 +407,7 @@ phy3 %>%
 
 ```{r}
 
-sample_data(phy3)$is.neg <- sample_data(phy3)$control_status  == "control"
+sample_data(phy3)$is.neg <- sample_data(phy3)$control_status == "control"
 
 
 ```
@@ -677,7 +685,7 @@ p_asvs
 
 
 
-# Visualize the genus-level taxonomy of ASVs removed at threshold 0.1.
+# Visualize the genus-level taxonomy of ASVs removed at threshold 0.5.
 asv_removed <- asv_summary %>%
   filter(contam_th05 == TRUE) %>%
   count(Genus) %>%
@@ -761,7 +769,7 @@ phy3.noncontam.prev %>% subset_samples(control_status   == "sample")  %>% sample
 
 
 
-### 3.3.1 Relative abundance of ASVs removed at threshold 0.1
+### 3.3.1 Relative abundance of ASVs removed at threshold 0.5
 
 This step calculates the proportion of total relative abundance assigned to ASVs flagged as contaminants. A low percentage indicates that contaminant ASVs account for only a small fraction of the overall community signal.
 
@@ -861,25 +869,28 @@ figureS3 <- (plot2 + theme(axis.text.x = element_blank())) /
 
 
 
-# 4. Final decision: use decontam threshold 0.1
+# 4. Final decision: use decontam threshold 0.5
 
-Based on the sensitivity analysis, threshold 0.1 was selected for the final decontaminated phyloseq object. This threshold removes ASVs most strongly enriched in negative controls while preserving most reads and ASVs in true skin samples.
+The submitted analysis selected threshold 0.5 for the final decontaminated
+phyloseq object. At this threshold, 107 ASVs were classified as contaminants,
+91.6% of skin-sample reads and 94.8% of skin-sample ASVs were retained, and
+24.3% of negative-control reads remained.
 
 
 ## 1) save figure 
 ```{r}
 
 ggsave(plot = figureS1,
-       filename = file.path(project_root, "result", "final", "figures", "preprocessing", "FigureS1.png"),
+       filename = file.path(project_root, "result", "final", "figures", "preprocessing", "QC_composition_before_decontam.png"),
        width = 12, height = 8)
 
 
 ggsave(plot = figureS2,
-       filename = file.path(project_root, "result", "final", "figures", "preprocessing", "FigureS2.png"),
+       filename = file.path(project_root, "result", "final", "figures", "FigureS1.png"),
        width = 12, height = 10)
 
 ggsave(plot = figureS3,
-       filename = file.path(project_root, "result", "final", "figures", "preprocessing", "FigureS3.png"),
+       filename = file.path(project_root, "result", "final", "figures", "FigureS2.png"),
        width = 12, height = 8)
 
 ```

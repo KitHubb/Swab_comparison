@@ -1,0 +1,15 @@
+"Anatomical_site","Analysis_item","Submitted_test","Submitted_p","Submitted_result","Revised_test","Revised_chisq","Revised_df","Revised_p","Kendall_W","Revised_significant","Significance_changed"
+"Antecubital fossa","Shannon index",Not reported,Not reported,"No significant pairwise difference reported; no omnibus p-value provided","Friedman test (participant block)",5.92,4,0.205202912003994,0.296,FALSE,FALSE
+"Antecubital fossa","Observed ASVs",Not reported,Not reported,"No significant pairwise difference reported; no omnibus p-value provided","Friedman test (participant block)",7.02040816326531,4,0.134813669720188,0.351020408163265,FALSE,FALSE
+"Forehead","Shannon index",Not reported,Not reported,"No significant pairwise difference reported; no omnibus p-value provided","Friedman test (participant block)",1.12,4,0.891086139604151,0.056,FALSE,FALSE
+"Forehead","Observed ASVs",Not reported,Not reported,"No significant pairwise difference reported; no omnibus p-value provided","Friedman test (participant block)",2.56,4,0.633925045033283,0.128,FALSE,FALSE
+"Antecubital fossa","Cutibacterium",Not reported,Not reported,"No significant pairwise difference reported; no omnibus p-value provided","Friedman test (participant block)",0.96,4,0.915799419873088,0.048,FALSE,FALSE
+"Antecubital fossa","Staphylococcus",Not reported,Not reported,"No significant pairwise difference reported; no omnibus p-value provided","Friedman test (participant block)",4.48,4,0.344925554188779,0.224,FALSE,FALSE
+"Antecubital fossa","Streptococcus",Not reported,Not reported,"No significant pairwise difference reported; no omnibus p-value provided","Friedman test (participant block)",9.12,4,0.058169047725453,0.456,FALSE,FALSE
+"Forehead","Cutibacterium",Not reported,Not reported,"No significant pairwise difference reported; no omnibus p-value provided","Friedman test (participant block)",7.2,4,0.125689123257546,0.36,FALSE,FALSE
+"Forehead","Staphylococcus",Not reported,Not reported,"No significant pairwise difference reported; no omnibus p-value provided","Friedman test (participant block)",5.6,4,0.231078237975828,0.28,FALSE,FALSE
+"Forehead","Streptococcus",Not reported,Not reported,"No significant pairwise difference reported; no omnibus p-value provided","Friedman test (participant block)",1.95555555555556,4,0.743933300661782,0.0977777777777778,FALSE,FALSE
+"Antecubital fossa","Sequencing depth","Kruskal-Wallis",0.417,"p = 0.417; nonsignificant","Friedman test (participant block)",3.68,4,0.451041490143655,0.184,FALSE,FALSE
+"Antecubital fossa","Total DNA concentration","Kruskal-Wallis",0.467,"p = 0.467; nonsignificant","Friedman test (participant block)",6.08510638297872,4,0.192881991316956,0.304255319148936,FALSE,FALSE
+"Forehead","Sequencing depth","Kruskal-Wallis",0.98,"p = 0.980; nonsignificant","Friedman test (participant block)",1.44,4,0.837213880251151,0.072,FALSE,FALSE
+"Forehead","Total DNA concentration","Kruskal-Wallis",0.604,"p = 0.604; nonsignificant","Friedman test (participant block)",5.31868131868132,4,0.256133195246455,0.265934065934066,FALSE,FALSE

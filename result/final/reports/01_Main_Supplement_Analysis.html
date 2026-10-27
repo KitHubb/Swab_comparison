@@ -1501,8 +1501,10 @@ participants are the independent biological units. Across-site DNA/read
 comparisons use the mean of the two sites within participant and system.
 Participant-level plots are descriptive: five swabs are not five
 independent replicate participants. The original tree, counts, and
-preprocessing are retained. Permutation analyses use 9,999 permutations
-and seed 42.</p>
+preprocessing are retained. The submitted PERMANOVA procedure is
+retained because the reviewer did not request a change to the restricted
+permutation analysis. Permutation analyses use 9,999 permutations and
+seed 42.</p>
 </div>
 <div id="packages-and-plotting-helper-functions" class="section level1" number="1">
 <h1><span class="header-section-number">1</span> Packages and plotting
@@ -32818,34 +32820,41 @@ meta$swab_type</code></pre>
 #     by = &quot;terms&quot;
 # ) 
 #  </code></pre>
-<pre class="r"><code># System/material/medium labels may change only within participant and site.
-set.seed(42)
-system_permutations &lt;- permute::shuffleSet(nrow(meta2), nset = 9999,
-  control = permute::how(blocks = interaction(meta2$subject_id, meta2$site_group)))
-# Site labels are exchanged as complete five-system bundles within participant.
-set.seed(42)
-site_permutations &lt;- t(replicate(9999, {
-  idx &lt;- seq_len(nrow(meta2))
-  for (id in unique(meta2$subject_id)) {
-    if (sample(c(FALSE, TRUE), 1)) {
-      rows &lt;- which(meta2$subject_id == id)
-      for (r in rows) {
-        partner &lt;- which(meta2$subject_id == id &amp;
-          meta2$swab_type2 == meta2$swab_type2[r] &amp;
-          meta2$site_group != meta2$site_group[r])
-        stopifnot(length(partner) == 1)
-        idx[r] &lt;- partner
-      }
-    }
-  }
-  idx
-}))
-df5 &lt;- adonis2(dist ~ Collection_medium, data = meta2, permutations = system_permutations)
-df1 &lt;- adonis2(dist ~ subject_id, data = meta2, permutations = 0)
-df2 &lt;- adonis2(dist ~ site_group, data = meta2, permutations = site_permutations)
-df3 &lt;- adonis2(dist ~ swab_type2, data = meta2, permutations = system_permutations)
-df4 &lt;- adonis2(dist ~ Swab_material, data = meta2, permutations = system_permutations)
-df1$`Pr(&gt;F)`[1] &lt;- NA_real_
+<pre class="r"><code># Retain the submitted PERMANOVA specification. The reviewer-requested statistical
+# revision applies to the univariate sampling-system comparisons below.
+df5 &lt;- adonis2(
+  dist ~ Collection_medium,
+  data = meta2,
+  permutations = 9999,
+  strata = meta2$subject_id
+)
+
+df1 &lt;- adonis2(
+  dist ~ subject_id,
+  data = meta2,
+  permutations = 9999
+)
+
+df2 &lt;- adonis2(
+  dist ~ site_group,
+  data = meta2,
+  permutations = 9999,
+  strata = meta2$subject_id
+)
+
+df3 &lt;- adonis2(
+  dist ~ swab_type2,
+  data = meta2,
+  permutations = 9999,
+  strata = meta2$subject_id
+)
+
+df4 &lt;- adonis2(
+  dist ~ Swab_material,
+  data = meta2,
+  permutations = 9999,
+  strata = meta2$subject_id
+)
 
 univar_per &lt;- data.frame(
   variable = c(&quot;Participant identity&quot;, &quot;Anatomical site&quot;, &quot;Sampling system&quot;, &quot;Swab-tip material&quot;, &quot;Collection medium&quot;),
@@ -34664,6 +34673,102 @@ print(friedman_results)</code></pre>
 ## 620       5            -2.500000e-02 0.05905823 0.2508706           ns</code></pre>
 <pre class="r"><code>write.csv(friedman_results, file.path(table_dir, &quot;Friedman_omnibus_all_endpoints.csv&quot;), row.names = FALSE)
 write.csv(paired_results, file.path(table_dir, &quot;Paired_Wilcoxon_posthoc_BH.csv&quot;), row.names = FALSE)
+
+# Reviewer-facing Table S4: retain the submitted descriptive columns and replace
+# Kruskal-Wallis/Dunn results with participant-blocked Friedman results.
+dna_read_summary &lt;- df2 %&gt;%
+  group_by(site_group, Type) %&gt;%
+  summarise(
+    n = n(),
+    DNA_mean_ng_uL = mean(Original_QC_Conc_ng_uL),
+    DNA_SD_ng_uL = sd(Original_QC_Conc_ng_uL),
+    Total_reads = sum(Depth),
+    Mean_reads = mean(Depth),
+    SD_reads = sd(Depth),
+    .groups = &quot;drop&quot;
+  )
+
+asv_by_system &lt;- table_s3_depth %&gt;%
+  filter(Scope == &quot;Anatomical site x sampling system&quot;) %&gt;%
+  transmute(
+    site_group = recode(Site, Ac = &quot;Antecubital&quot;, Fh = &quot;Forehead&quot;),
+    Type = Sampling_system,
+    Unique_ASVs_detected = ASV_Count
+  )
+
+dna_read_tests &lt;- friedman_results %&gt;%
+  filter(site_group %in% c(&quot;Antecubital&quot;, &quot;Forehead&quot;),
+         Endpoint %in% c(&quot;Depth&quot;, &quot;Original_QC_Conc_ng_uL&quot;)) %&gt;%
+  transmute(
+    site_group,
+    Test = if_else(Endpoint == &quot;Depth&quot;, &quot;Read&quot;, &quot;DNA&quot;),
+    Friedman_chisq = statistic,
+    Friedman_df = df,
+    Friedman_p = p,
+    Kendall_W
+  ) %&gt;%
+  pivot_wider(
+    names_from = Test,
+    values_from = c(Friedman_chisq, Friedman_df, Friedman_p, Kendall_W),
+    names_glue = &quot;{Test}_{.value}&quot;
+  )
+
+TableS4_revision &lt;- dna_read_summary %&gt;%
+  left_join(asv_by_system, by = c(&quot;site_group&quot;, &quot;Type&quot;)) %&gt;%
+  left_join(dna_read_tests, by = &quot;site_group&quot;) %&gt;%
+  mutate(
+    Anatomical_site = recode(site_group, Antecubital = &quot;Antecubital fossa&quot;),
+    Sampling_system = as.character(Type)
+  ) %&gt;%
+  select(
+    Anatomical_site, Sampling_system, n,
+    DNA_mean_ng_uL, DNA_SD_ng_uL, Total_reads, Mean_reads, SD_reads,
+    Unique_ASVs_detected,
+    DNA_Friedman_chisq, DNA_Friedman_df, DNA_Friedman_p, DNA_Kendall_W,
+    Read_Friedman_chisq, Read_Friedman_df, Read_Friedman_p, Read_Kendall_W
+  )
+
+write.csv(
+  TableS4_revision,
+  file.path(table_dir, &quot;TableS4_DNA_read_Friedman.csv&quot;),
+  row.names = FALSE
+)
+
+# Reviewer-facing Table S5: retain the submitted abundance layout and add the
+# corrected omnibus repeated-measures result. &quot;Others&quot; remains descriptive only.
+TableS5_revision &lt;- bind_rows(
+  relative_tables$Antecubital %&gt;% mutate(site_group = &quot;Antecubital&quot;),
+  relative_tables$Forehead %&gt;% mutate(site_group = &quot;Forehead&quot;)
+) %&gt;%
+  left_join(
+    friedman_results %&gt;%
+      filter(grepl(&quot;^(Phylum|Genus):&quot;, Endpoint)) %&gt;%
+      transmute(
+        site_group,
+        Rank = sub(&quot;:.*&quot;, &quot;&quot;, Endpoint),
+        Taxa = sub(&quot;^[^:]+: &quot;, &quot;&quot;, Endpoint),
+        Friedman_chisq = statistic,
+        Friedman_df = df,
+        Friedman_p = p,
+        Kendall_W,
+        Friedman_q_BH_within_site_and_rank = q_BH
+      ),
+    by = c(&quot;site_group&quot;, &quot;Rank&quot;, &quot;Taxa&quot;)
+  ) %&gt;%
+  mutate(Anatomical_site = recode(site_group, Antecubital = &quot;Antecubital fossa&quot;)) %&gt;%
+  select(
+    Anatomical_site, Rank, Taxa, all_of(type_columns), Average,
+    Friedman_chisq, Friedman_df, Friedman_p, Kendall_W,
+    Friedman_q_BH_within_site_and_rank
+  )
+
+write.csv(
+  TableS5_revision,
+  file.path(table_dir, &quot;TableS5_relative_abundance_with_Friedman.csv&quot;),
+  row.names = FALSE,
+  na = &quot;N/A&quot;
+)
+
 saveRDS(list(friedman = friedman_results, posthoc = paired_results,
              permanova = univar_per, session = sessionInfo()),
         file.path(table_dir, &quot;statistical_results.rds&quot;))
@@ -34676,9 +34781,11 @@ sessionInfo()</code></pre>
 ##   LAPACK version 3.12.1
 ## 
 ## locale:
-## [1] LC_COLLATE=Korean_Korea.utf8  LC_CTYPE=Korean_Korea.utf8   
-## [3] LC_MONETARY=Korean_Korea.utf8 LC_NUMERIC=C                 
-## [5] LC_TIME=Korean_Korea.utf8    
+## [1] LC_COLLATE=English_United States.utf8 
+## [2] LC_CTYPE=English_United States.utf8   
+## [3] LC_MONETARY=English_United States.utf8
+## [4] LC_NUMERIC=C                          
+## [5] LC_TIME=English_United States.utf8    
 ## 
 ## time zone: Asia/Seoul
 ## tzcode source: internal

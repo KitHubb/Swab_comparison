@@ -2,3 +2,4 @@ current_path	original_path	status
 analysis/old/02_Main_Supplement_Figure_Tables_script.Rmd	02_Main_Supplement_Figure_Tables_script.Rmd	archived pre-revision analysis
 analysis/old/02_Microbiome_analysis.Rmd	02_Microbiome_analysis.Rmd	archived exploratory analysis
 analysis/old/decontam_realdata_check/	examples/decontam_realdata_check/	archived decontam check bundle
+analysis/old/04_Decontam_Copan_Forehead_tutorial.Rmd	04_Decontam_Copan_Forehead_tutorial.Rmd	archived six-sample tutorial; not used for the manuscript

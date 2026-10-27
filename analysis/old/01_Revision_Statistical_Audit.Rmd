@@ -1,0 +1,184 @@
+---
+title: "Revision statistical audit: submitted versus revised results"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+project_root <- if (file.exists(file.path(getwd(), "Rproj_DT_Swab.Rproj"))) {
+  normalizePath(getwd(), winslash = "/", mustWork = TRUE)
+} else {
+  normalizePath(file.path(getwd(), "..", ".."), winslash = "/", mustWork = TRUE)
+}
+library(dplyr)
+library(tidyr)
+library(knitr)
+table_dir <- file.path(project_root, "result", "final", "tables")
+revision_table_dir <- file.path(project_root, "result", "revision", "tables")
+dir.create(revision_table_dir, recursive = TRUE, showWarnings = FALSE)
+friedman <- read.csv(file.path(table_dir, "Friedman_omnibus_all_endpoints.csv"))
+posthoc <- read.csv(file.path(table_dir, "Paired_Wilcoxon_posthoc_BH.csv"), check.names = FALSE)
+permanova <- read.csv(file.path(table_dir, "Table3_permanova_BH.csv"), check.names = FALSE)
+```
+
+# Scope
+
+This audit is limited to the changes requested by the reviewers and already
+described in the professor's response-letter draft: participant-blocked Friedman
+tests, paired Wilcoxon signed-rank post-hoc tests with BH correction, residual
+negative-control taxon reporting, and cautious putative species-level wording.
+It does not add an independent scientific interpretation.
+
+# Key submitted-versus-revised results
+
+```{r key-comparison}
+key_revised <- friedman %>%
+  filter(
+    Family %in% c("Alpha", "Selected genus", "DNA/read"),
+    site_group %in% c("Antecubital", "Forehead")
+  ) %>%
+  mutate(
+    Analysis_item = case_when(
+      Endpoint == "Alpha: Shannon index" ~ "Shannon index",
+      Endpoint == "Alpha: Observed ASVs" ~ "Observed ASVs",
+      Endpoint == "Depth" ~ "Sequencing depth",
+      Endpoint == "Original_QC_Conc_ng_uL" ~ "Total DNA concentration",
+      TRUE ~ sub("Selected genus: ", "", Endpoint)
+    ),
+    Anatomical_site = recode(site_group, Antecubital = "Antecubital fossa"),
+    Revised_test = "Friedman test (participant block)",
+    Revised_significant = p < 0.05
+  ) %>%
+  select(
+    Anatomical_site, Analysis_item, Revised_test,
+    Revised_chisq = statistic, Revised_df = df, Revised_p = p,
+    Kendall_W, Revised_significant
+  )
+
+submitted_specific <- tibble::tribble(
+  ~Anatomical_site, ~Analysis_item, ~Submitted_test, ~Submitted_p,
+  "Antecubital fossa", "Sequencing depth", "Kruskal-Wallis", 0.417,
+  "Antecubital fossa", "Total DNA concentration", "Kruskal-Wallis", 0.467,
+  "Forehead", "Sequencing depth", "Kruskal-Wallis", 0.980,
+  "Forehead", "Total DNA concentration", "Kruskal-Wallis", 0.604
+)
+
+comparison <- key_revised %>%
+  left_join(submitted_specific, by = c("Anatomical_site", "Analysis_item")) %>%
+  mutate(
+    Submitted_result = if_else(
+      is.na(Submitted_p),
+      "No significant pairwise difference reported; no omnibus p-value provided",
+      paste0("p = ", sprintf("%.3f", Submitted_p), "; nonsignificant")
+    ),
+    Significance_changed = FALSE
+  ) %>%
+  select(
+    Anatomical_site, Analysis_item, Submitted_test, Submitted_p,
+    Submitted_result, Revised_test, Revised_chisq, Revised_df,
+    Revised_p, Kendall_W, Revised_significant, Significance_changed
+  )
+
+write.csv(
+  comparison,
+  file.path(revision_table_dir, "Submitted_vs_revised_key_statistics.csv"),
+  row.names = FALSE,
+  na = "Not reported"
+)
+
+comparison %>%
+  mutate(
+    Revised_p = format.pval(Revised_p, digits = 4),
+    Kendall_W = round(Kendall_W, 3)
+  ) %>%
+  kable(caption = "Submitted and revised univariate results")
+```
+
+No reviewer-targeted univariate endpoint changed from nonsignificant to
+significant or from significant to nonsignificant. Accordingly, the overall
+result tone remains "no statistically significant difference was detected";
+the revision changes the analytical method and the exact statistics, not the
+direction of the conclusion.
+
+# PERMANOVA check
+
+```{r permanova-check}
+permanova %>%
+  mutate(across(where(is.numeric), ~ signif(.x, 5))) %>%
+  kable(caption = "PERMANOVA table retained from the submitted analysis")
+```
+
+The reviewer did not request a replacement PERMANOVA. The submitted restricted
+permutation specification and its values are therefore retained. Sampling system,
+swab-tip material, and collection medium remain nonsignificant; participant and
+anatomical site remain significant.
+
+# Multiple-testing check
+
+```{r multiplicity-check}
+multiple_testing_summary <- tibble(
+  Check = c(
+    "Reviewer-targeted Friedman omnibus tests with p < 0.05",
+    "All taxon-level Friedman tests with within-site/rank BH q < 0.05",
+    "All paired Wilcoxon comparisons with within-endpoint/site BH adjusted p < 0.05"
+  ),
+  Count = c(
+    sum(friedman$p < 0.05 & friedman$Family %in% c("Alpha", "Selected genus", "DNA/read") &
+          friedman$site_group %in% c("Antecubital", "Forehead")),
+    sum(friedman$q_BH < 0.05, na.rm = TRUE),
+    sum(posthoc[["p.adj"]] < 0.05, na.rm = TRUE)
+  )
+)
+multiple_testing_summary %>% kable()
+```
+
+Two taxon-level omnibus tests have unadjusted p-values below 0.05
+(antecubital *Gordonia* and forehead Neisseriaceae_f), but neither remains
+significant after the prespecified within-site/rank BH correction. These do not
+support a new positive result statement.
+
+# Where each item belongs
+
+| Item | Revised manuscript Results | Response letter only |
+|---|---|---|
+| Alpha diversity | Report the four Friedman statistics and p-values; retain the statement that no sampling-system difference was detected | Explain replacement of the previously described rank-sum approach with participant-blocked Friedman tests |
+| Selected genera | Report the six Friedman p-values, or a compact range with the closest result identified; retain nonsignificant wording | State that all ten paired comparisons per genus/site were participant-aligned and BH-adjusted |
+| DNA concentration and read depth | Replace the four Kruskal-Wallis p-values in the Table S4 note with the four Friedman results | Describe the paired design correction and note that no BH-adjusted post-hoc comparison was significant |
+| PERMANOVA | Keep the submitted Table 2 values and conclusions | State that the restricted permutation analysis was reviewed and retained |
+| Sampling-system assignment | In Methods, state that system positions were fixed within each anatomical site; in Discussion, state the spatial-heterogeneity limitation in definite wording | Replace the randomized/counterbalanced/fixed placeholders with the fixed-position response |
+| Residual negative-control reads | Add the leading residual genera and their overlap with dominant skin genera to the contamination Results/Supplement | Explain that conservative filtering avoided removing dominant skin-associated signals and add the absence of no-template PCR and mock-community controls as a limitation |
+| Putative species-level profile | Use "putative" and descriptive language for Figure S3 | Explain that species-level assignments are exploratory and not confirmatory |
+
+# Remaining replacements in the professor's response draft
+
+The response draft still contains bracketed placeholders. They should be replaced
+only with the reviewer-requested findings below.
+
+| Draft location | Replacement content supported by the revised analysis |
+|---|---|
+| Repeated-measures result placeholder | All reviewer-targeted Friedman tests and all BH-adjusted paired Wilcoxon comparisons were nonsignificant; the main conclusion did not change. |
+| Contamination table/figure numbers | Insert the final supplementary numbering after the new residual-control genus table is placed. |
+| Contamination threshold and counts | Threshold 0.5; 107 ASVs classified as contaminants; 24.3% (22,133/90,999) of negative-control reads remained, corresponding to 75.7% removed; 91.6% of biological-sample reads remained, corresponding to 8.4% removed. |
+| Predominant-profile stability | Dominant community-profile interpretation remained unchanged after the corrected analyses; no BH-adjusted taxon-level result was significant. |
+| Sampling assignment | Fixed positions were used consistently across participants and sites; local spatial heterogeneity must therefore be stated as a limitation, not conditionally. |
+| Overall interpretation placeholder | State that no statistically significant system-level difference was detected under the tested sampling and immediate-freezing conditions; do not claim equivalence. |
+| Data/code availability placeholder | Confirm the BioProject and GitHub links immediately before submission, then replace the bracketed alternative with the verified statement. |
+
+The current revised-manuscript draft still describes Wilcoxon rank-sum tests and
+Kruskal-Wallis/Dunn tests in Statistical Analysis. Those sentences must be replaced
+with the Friedman and participant-aligned paired Wilcoxon procedures before the
+new numerical results are inserted.
+
+# Updated files
+
+- `result/final/figures/Figure1_bacterial_diversity.*`: Friedman labels on alpha-diversity panels.
+- `result/final/figures/Figure2_bacterial_community_composition.*`: Friedman labels for selected genera.
+- `result/final/tables/TableS4_DNA_read_Friedman.csv`: revised Table S4 data and tests.
+- `result/final/tables/TableS5_relative_abundance_with_Friedman.csv`: submitted abundance layout plus corrected omnibus tests.
+- `result/final/tables/Reviewer1_residual_negative_control_genera.csv`: residual control-read genus profile requested by Reviewer 1.
+- `result/final/figures/FigureS3_species_composition.*`: putative species-level supplementary figure.
